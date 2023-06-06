@@ -138,6 +138,7 @@ class ConcentrationTracker(Component):
 
         # create outputs if necessary and get reference.
         self.initialize_output_fields()
+        self._concentration = self._grid.at_node["sed_property__concentration"]
         # self._slope = self._grid.at_link["topographic__slope"]
         # self._bedrock = self._grid.at_node["bedrock__elevation"]
 
@@ -152,7 +153,7 @@ class ConcentrationTracker(Component):
         """
                 
         # Define soil depth at current time
-        C_old = self._grid.at_node['Sm__concentration']
+        C_old = self._concentration
         
         # Map concentration from nodes to links (following soil flux direction)
         self._grid.at_link['C'] = map_value_at_max_node_to_link(
@@ -170,67 +171,19 @@ class ConcentrationTracker(Component):
         # Calculate flux concentration divergence
         dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
         
-        # Calculation other components of mass balance equation
+        # Calculate other components of mass balance equation
         C_local = C_old * (self._soil__depth_old/self._soil__depth)
-        Production = (dt*P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        Decay = (dt*D/2) * (self._soil__depth_old/self._soil__depth + 1)
+        Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
+        Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
-        mg.at_node['Sm__concentration'] = C_local + (dt/self._soil__depth) * (- dQCdx) + Production - Decay
+        # Calculate concentration
+        self._concentration = (C_local + (dt/self._soil__depth) * (- dQCdx)
+                               + Production - Decay
+                               )
         
-        # Define concentration
-        C_out = mg.at_node['Sm__concentration']
-        C_old = mg.at_node['Sm__concentration']
-        H_old = H_new
+        # Update old soil depth to new value
+        self._soil__depth_old = self._soil__depth
 
-
-
-
-
-
-        # update soil thickness
-        self._grid.at_node["soil__depth"][:] = (
-            self._grid.at_node["topographic__elevation"]
-            - self._grid.at_node["bedrock__elevation"]
-        )
-
-        # Calculate soil depth at links.
-        H_link = self._grid.map_value_at_max_node_to_link(
-            "topographic__elevation", "soil__depth"
-        )
-
-        # Calculate gradients
-        slope = self._grid.calc_grad_at_link(self._elev)
-        slope[self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
-
-        # Calculate flux
-        self._flux[:] = (
-            -self._K
-            * slope
-            * self._soil_transport_decay_depth
-            * (1.0 - np.exp(-H_link / self._soil_transport_decay_depth))
-        )
-
-        # Calculate flux divergence
-        dqdx = self._grid.calc_flux_div_at_node(self._flux)
-
-        # Calculate change in soil depth
-        dhdt = self._soil_prod_rate - dqdx
-
-        # Calculate soil depth at nodes
-        self._depth[self._grid.core_nodes] += dhdt[self._grid.core_nodes] * dt
-
-        # prevent negative soil thickness
-        self._depth[self._depth < 0.0] = 0.0
-
-        # Calculate bedrock elevation
-        self._bedrock[self._grid.core_nodes] -= (
-            self._soil_prod_rate[self._grid.core_nodes] * dt
-        )
-
-        # Update topography
-        self._elev[self._grid.core_nodes] = (
-            self._depth[self._grid.core_nodes] + self._bedrock[self._grid.core_nodes]
-        )
 
     def run_one_step(self, dt):
         """
