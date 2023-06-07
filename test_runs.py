@@ -15,7 +15,6 @@ import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid, imshow_grid
 from landlab.components import ExponentialWeatherer, DepthDependentDiffuser
-from landlab.grid.mappers import map_value_at_max_node_to_link
 
 from sediment_property_concentration_tracker import ConcentrationTracker
 
@@ -37,7 +36,7 @@ dx = 1
 dy = dx
 dt = 0.5
 
-total_t = 100
+total_t = 100000
 ndt = int(total_t // dt)
 
 C_initial = 0.5
@@ -82,11 +81,9 @@ mg.at_node['topographic__elevation'][:] += mg.at_node['bedrock__elevation']
 mg.at_node['topographic__elevation'][:] += mg.at_node['soil__depth']
 
 # Magnetic susceptibility concentration field
-# _ = mg.add_zeros('sed_property__concentration', at='node', units= ['kg/m^3','kg/m^3'])
-# mg.at_node['sed_property__concentration'] += 0#C_initial
-# mg.at_node['sed_property__concentration'][ncols + int(3*ncols/4)-1] += C_initial
-# _ = mg.add_zeros('C', at='link')
-# _ = mg.add_zeros('QC', at='link')
+_ = mg.add_zeros('sed_property__concentration', at='node', units= ['kg/m^3','kg/m^3'])
+mg.at_node['sed_property__concentration'] += 0#C_initial
+mg.at_node['sed_property__concentration'][ncols + int(3*ncols/4)-1] += C_initial
 
 core_ids = np.append(hill_bottom_node, mg.core_nodes)
 
@@ -188,12 +185,13 @@ for i in range(ndt):
     T[i] = elapsed_time
     
    
-    if i*dt % 5 == 0:
+    if i*dt % 5000 == 0:
         
         # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
         # plt.show()
         
         plot_hill_profile()
+
     
 #     record_M_total_nodes[i] = np.sum(mg.at_node['sed_property__concentration'][mg.core_nodes] * 
 #                                mg.at_node['soil__depth'][mg.core_nodes]
@@ -216,10 +214,10 @@ for i in range(ndt):
 
 # %% Plot final hillslope
 
-imshow_grid(mg, "topographic__elevation", cmap=cmap_terrain, color_for_closed='pink')
-plt.show()
-imshow_grid(mg, "bedrock__elevation", cmap=cmap_terrain, color_for_closed='pink')
-plt.show()
-imshow_grid(mg, "soil__depth", cmap=cmap_soil, color_for_closed='pink')
-plt.show()
+# imshow_grid(mg, "topographic__elevation", cmap=cmap_terrain, color_for_closed='pink')
+# plt.show()
+# imshow_grid(mg, "bedrock__elevation", cmap=cmap_terrain, color_for_closed='pink')
+# plt.show()
+# imshow_grid(mg, "soil__depth", cmap=cmap_soil, color_for_closed='pink')
+# plt.show()
 

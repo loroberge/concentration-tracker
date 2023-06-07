@@ -92,14 +92,6 @@ class ConcentrationTracker(Component):
             "units": "m",
             "mapping": "node",
             "doc": "Land surface topographic elevation",
-        },
-        "sed_property__concentration": {
-            "dtype": float,
-            "intent": "out",
-            "optional": False,
-            "units": "kg/m^3",
-            "mapping": "node",
-            "doc": "Mass concentration of a property per volume of sediment",
         }
     }
 
@@ -136,9 +128,6 @@ class ConcentrationTracker(Component):
         self._soil__depth_old = np.zeros(grid.number_of_nodes)
         self._soil__depth_old += self._grid.at_node["soil__depth"]
         
-        _ = grid.add_zeros('C', at='link')
-        _ = grid.add_zeros('QC', at='link')
-
         # get reference to inputs
         self._soil__depth = self._grid.at_node["soil__depth"]
         self._soil_prod_rate = self._grid.at_node["soil_production__rate"]
@@ -148,13 +137,13 @@ class ConcentrationTracker(Component):
         self.initialize_output_fields()
         
         # Sediment property concentration field (at nodes)
-        # if "sed_property__concentration" in grid.at_node:
-        #     self._concentration = grid.at_node["sed_property__concentration"]
-        # else:
-        self._concentration = grid.add_zeros(
-            "sed_property__concentration", at="node", dtype=float
-            )
-        self._concentration[:] += self._C_init
+        if "sed_property__concentration" in grid.at_node:
+            self._concentration = grid.at_node["sed_property__concentration"]
+        else:
+            self._concentration = grid.add_zeros(
+                "sed_property__concentration", at="node", dtype=float
+                )
+            self._concentration[:] += self._C_init
         
         # Sediment property concentration field (at links, to calculate dQCdx)
         if "C" in grid.at_link:
@@ -197,21 +186,21 @@ class ConcentrationTracker(Component):
         # Define soil depth at current time
         C_old = self._concentration[:]
         
-        # # Map concentration from nodes to links (following soil flux direction)
-        # self._grid.at_link['C'] = map_value_at_max_node_to_link(
-        #     self._grid,'topographic__elevation','sed_property__concentration'
-        #     )
+        # Map concentration from nodes to links (following soil flux direction)
+        self._grid.at_link['C'] = map_value_at_max_node_to_link(
+            self._grid,'topographic__elevation','sed_property__concentration'
+            )
         
-        # # Calculate QC at links (sediment flux times concentration)
-        # self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'] *
-        #                             self._grid.at_link['C']
-        #                             )
+        # Calculate QC at links (sediment flux times concentration)
+        self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
+                                    self._grid.at_link['C'][:]
+                                    )
         
-        # # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        # self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0
+        # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
+        self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0
         
-        # # Calculate flux concentration divergence
-        # dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
+        # Calculate flux concentration divergence
+        dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
         
         # # Calculate other components of mass balance equation
         C_local = C_old * (self._soil__depth_old/self._soil__depth)
@@ -219,16 +208,16 @@ class ConcentrationTracker(Component):
         Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
         Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
-        # # Calculate concentration
-        # self._concentration = (C_local + C_from_weathering 
-        #                         + (dt/self._soil__depth) * (- dQCdx)
-        #                         + Production - Decay
-        #                         )
+        # Calculate concentration
+        self._concentration[:] = (C_local + C_from_weathering 
+                                + (dt/self._soil__depth) * (- dQCdx)
+                                + Production - Decay
+                                )
         
-        self._concentration[:] = C_local + C_from_weathering + Production - Decay
+        #self._concentration[:] = C_local + C_from_weathering + Production - Decay
         
         # Update old soil depth to new value
-        self._soil__depth_old = copy.deepcopy(self._soil__depth)
+        self._soil__depth_old = self._soil__depth[:]
 
 
     def run_one_step(self, dt):
