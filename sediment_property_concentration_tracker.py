@@ -190,6 +190,8 @@ class ConcentrationTracker(Component):
         self._grid.at_link['C'] = map_value_at_max_node_to_link(
             self._grid,'topographic__elevation','sed_property__concentration'
             )
+        # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
+        self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0
         
         # Calculate QC at links (sediment flux times concentration)
         self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
@@ -213,9 +215,7 @@ class ConcentrationTracker(Component):
                                 + (dt/self._soil__depth) * (- dQCdx)
                                 + Production - Decay
                                 )
-        
-        #self._concentration[:] = C_local + C_from_weathering + Production - Decay
-        
+                
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth[:]
 
