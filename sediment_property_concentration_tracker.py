@@ -190,6 +190,12 @@ class ConcentrationTracker(Component):
         self._grid.at_link['C'] = map_value_at_max_node_to_link(
             self._grid,'topographic__elevation','sed_property__concentration'
             )
+        # Replace values with zero for all links that are NOT active links
+        # NOTE: this might be a problem if someone wants to use fixed-value 
+        # or fixed-gradient links. I don't know if the above mapping will 
+        # overwrite those values. Certainly the below will!
+        self._grid.at_link['C'][np.where(self._grid.status_at_link!=0)] = 0
+        
         # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
         self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0
         

@@ -24,23 +24,23 @@ warnings.filterwarnings('ignore')
 # %% Define input parameters
 
 # Set soil production rate to zero (to avoid C difference between bedrock and soil)
-soil_production_maximum_rate = 0.01
-soil_production_decay_depth = 1
+soil_production_maximum_rate = 0.0000000000000000001
+soil_production_decay_depth = 0.0000000000000000001
 
 nrows = 3
-ncols = 25
+ncols = 4
 n_core_nodes = (nrows-2)*(ncols-2)
 hill_bottom_node = ncols
 hill_bottom_link = (ncols*2)-1
 
 dx = 1
 dy = dx
-dt = 0.1
+dt = 0.5
 
-total_t = 500
+total_t = 10
 ndt = int(total_t // dt)
 
-C_initial = 0.75
+C_initial = 0.5
 C_br = 0
 
 P = 0
@@ -69,12 +69,12 @@ mg.set_status_at_node_on_edges(right=4,
 
 # Soil depth
 _ = mg.add_zeros('soil__depth', at='node', units= ['m','m'])
-mg.at_node['soil__depth'] += 2 #mg.node_x/2 
+mg.at_node['soil__depth'] += mg.node_x/2 
 
 # Bedrock elevation
 _ = mg.add_zeros('bedrock__elevation', at='node', units= ['m','m'])
 mg.at_node['bedrock__elevation'] += mg.node_x/2
-mg.at_node['bedrock__elevation'][mg.node_x > ncols/2] += 5
+#mg.at_node['bedrock__elevation'][mg.node_x > ncols/2] += 5
 
 # Topographic elevation
 _ = mg.add_zeros('topographic__elevation', at='node', units= ['m','m'])
@@ -107,8 +107,10 @@ ct = ConcentrationTracker(mg,
 
 T = np.zeros(ndt)       # Time 
 
+ymax = np.max(mg.at_node["topographic__elevation"][core_ids])
+
 def plot_hill_profile():
-    
+        
     distance = mg.node_x[core_ids]
     elev_topo = mg.at_node['topographic__elevation'][core_ids]
     elev_br = mg.at_node['bedrock__elevation'][core_ids]
@@ -125,7 +127,7 @@ def plot_hill_profile():
     ax1.set_xlabel('Distance (m)', fontsize=18, color='black')
     ax1.set_ylabel('Elevation (m)', fontsize=18, color='black')
     plt.plot(distance,elev_topo,distance,elev_br)
-    plt.ylim(0,30)
+    plt.ylim(0,ymax)
     ax1.tick_params(axis='y', labelcolor='black')
     ax1.legend(['Soil depth','Concentration'],loc="upper left")
     
@@ -189,7 +191,7 @@ for i in range(ndt):
     
     # plot_hill_profile()
 
-    if i*dt % 5 == 0:
+    if i*dt % 100 == 0:
         
         plot_hill_profile()
         
@@ -204,13 +206,32 @@ for i in range(ndt):
     record_M_out[i] = mg.at_link['QC'][hill_bottom_link]
     record_Soil_flux[i] = mg.at_link['soil__flux'][hill_bottom_link]
     
-    record_H_total_nodes[i] = np.sum(mg.at_node['soil__depth'][mg.core_nodes])
+    record_H_total_nodes[i] = np.sum(mg.at_node['soil__depth'][core_ids])
+    #record_M_at_each_node[:,i] = mg.at_node['sed_property__concentration'][core_ids]
     
-plt.plot(record_M_total_nodes)
+plt.plot(T,record_M_total_nodes)
+plt.ylabel("Total mass of soil property on grid")
+plt.xlabel("Time (y)")
 plt.show()
-plt.plot(record_M_total_links)
+
+plt.plot(T,record_M_total_links)
+plt.ylabel("Total mass of soil property on links")
+plt.xlabel("Time (y)")
 plt.show()
-plt.plot(record_M_out)
+
+plt.plot(T,record_M_out)
+plt.ylabel("Total mass of soil property exiting bottom link")
+plt.xlabel("Time (y)")
+plt.show()
+
+plt.plot(T,record_Soil_flux)
+plt.ylabel("Soil flux exiting bottom link")
+plt.xlabel("Time (y)")
+plt.show()
+
+plt.plot(T,record_H_total_nodes)
+plt.ylabel("Total depth of soil on grid")
+plt.xlabel("Time (y)")
 plt.show()
 
 mass_conserved_fraction = np.min(record_M_total_nodes)/record_M_total_nodes[0]
