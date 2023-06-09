@@ -28,7 +28,7 @@ soil_production_maximum_rate = 0.0000000000000000001
 soil_production_decay_depth = 0.0000000000000000001
 
 nrows = 3
-ncols = 4
+ncols = 25
 n_core_nodes = (nrows-2)*(ncols-2)
 hill_bottom_node = ncols
 hill_bottom_link = (ncols*2)-1
@@ -189,11 +189,11 @@ for i in range(ndt):
     
     T[i] = elapsed_time
     
-    # plot_hill_profile()
+    plot_hill_profile()
 
-    if i*dt % 100 == 0:
+    # if i*dt % 1 == 0:
         
-        plot_hill_profile()
+    #     plot_hill_profile()
         
         # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
         # plt.show()

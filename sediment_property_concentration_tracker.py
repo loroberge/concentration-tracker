@@ -5,11 +5,11 @@ Created on Wed May 31 11:41:20 2023
 @author: LaurentRoberge
 """
 
-import copy
 import numpy as np
 
 from landlab import Component, LinkStatus
 from landlab.grid.mappers import map_value_at_max_node_to_link
+from landlab.utils.return_array import return_array_at_node
 
 
 class ConcentrationTracker(Component):
@@ -63,7 +63,7 @@ class ConcentrationTracker(Component):
     _info = {
         "soil__depth": {
             "dtype": float,
-            "intent": "inout",
+            "intent": "in",
             "optional": False,
             "units": "m",
             "mapping": "node",
@@ -71,7 +71,7 @@ class ConcentrationTracker(Component):
         },
         "soil__flux": {
             "dtype": float,
-            "intent": "out",
+            "intent": "in",
             "optional": False,
             "units": "m^2/yr",
             "mapping": "link",
@@ -92,6 +92,14 @@ class ConcentrationTracker(Component):
             "units": "m",
             "mapping": "node",
             "doc": "Land surface topographic elevation",
+        },
+        "sed_property__concentration": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3",
+            "mapping": "node",
+            "doc": "Mass concentration of property per volume of sediment",
         }
     }
 
@@ -107,51 +115,57 @@ class ConcentrationTracker(Component):
         ----------
         grid: ModelGrid
             Landlab ModelGrid object
-        concentration_initial: float or array
+        concentration_initial: positive float, array, or field name (optional)
             Initial concentration in soil/sediment, kg/m^3
-        concentration_in_bedrock: float or array
+        concentration_in_bedrock: positive float, array, or field name (optional)
             Concentration in bedrock, kg/m^3
-        local_production_rate: float or array
+        local_production_rate: float, array, or field name (optional)
             Rate of local production, kg/m^3/yr
-        local_decay_rate: float or array
+        local_decay_rate: float, array, or field name (optional)
             Rate of local decay, kg/m^3/yr
         """
+        
         super().__init__(grid)
         # Store grid and parameters
-        
-        self._C_init = concentration_initial
-        self._C_br = concentration_in_bedrock
-        self._P = local_production_rate
-        self._D = local_decay_rate
-        
-        # NOT SURE WHERE TO PUT THIS.... OUTPUT?
-        self._soil__depth_old = np.zeros(grid.number_of_nodes)
-        self._soil__depth_old += self._grid.at_node["soil__depth"]
+           
+        # use setters for C_init, C_br, P, and D defined below
+        self.C_init = concentration_initial
+        self.C_br = concentration_in_bedrock
+        self.P = local_production_rate
+        self.D = local_decay_rate
         
         # get reference to inputs
         self._soil__depth = self._grid.at_node["soil__depth"]
+        self._soil__depth_old = self._soil__depth[:]
         self._soil_prod_rate = self._grid.at_node["soil_production__rate"]
         self._flux = self._grid.at_link["soil__flux"]
         
         # create outputs if necessary and get reference.
         self.initialize_output_fields()
         
-        # Sediment property concentration field (at nodes)
-        if "sed_property__concentration" in grid.at_node:
-            self._concentration = grid.at_node["sed_property__concentration"]
-        else:
-            self._concentration = grid.add_zeros(
-                "sed_property__concentration", at="node", dtype=float
-                )
-            self._concentration[:] += self._C_init
+        # Define concentration field
+        self._concentration = grid.at_node["sed_property__concentration"]
+        
+        # # Sediment property concentration field (at nodes)
+        # if "sed_property__concentration" in grid.at_node:
+        #     self._concentration = grid.at_node["sed_property__concentration"]
+        # else:
+        #     self._concentration = grid.add_zeros(
+        #         "sed_property__concentration", at="node", dtype=float
+        #         )
+        #     self._concentration[:] += self._C_init
         
         # Sediment property concentration field (at links, to calculate dQCdx)
+        # QUESTION: Is this the right way to set up this field?
+        # It is only used for internal calculations and is overwritten at each use.
         if "C" in grid.at_link:
             self._C_links = grid.at_link["C"]
         else:
             self._C_links = grid.add_zeros("C", at="link", dtype=float)
         
         # Sediment property mass field (at links, to calculate dQCdx)
+        # QUESTION: Is this the right way to set up this field?
+        # It is only used for internal calculations and is overwritten at each use.
         if "QC" in grid.at_link:
             self._QC_links = grid.at_link["QC"]
         else:
@@ -172,6 +186,42 @@ class ConcentrationTracker(Component):
             if concentration_in_bedrock < 0:
                 raise ValueError("Concentration in bedrock cannot be negative.")
         
+    @property
+    def C_init(self):
+        """Initial concentration in soil/sediment (kg/m^3)."""
+        return self._C_init
+    
+    @property
+    def C_br(self):
+        """Concentration in bedrock (kg/m^3)."""
+        return self._C_br
+    
+    @property
+    def P(self):
+        """Rate of local production (kg/m^3/yr)."""
+        return self._P
+    
+    @property
+    def D(self):
+        """Rate of local decay (kg/m^3/yr)."""
+        return self._D
+
+    @C_init.setter
+    def C_init(self, new_val):
+        self._C_init = return_array_at_node(self._grid, new_val)
+        
+    @C_br.setter
+    def C_br(self, new_val):
+        self._C_br = return_array_at_node(self._grid, new_val)
+        
+    @P.setter
+    def P(self, new_val):
+        self._P = return_array_at_node(self._grid, new_val)
+        
+    @D.setter
+    def D(self, new_val):
+        self._D = return_array_at_node(self._grid, new_val)
+
 
     def concentration(self, dt):
         """Calculate change in concentration for a time period 'dt'.
@@ -183,44 +233,44 @@ class ConcentrationTracker(Component):
             The imposed timestep.
         """
                 
-        # Define soil depth at current time
+        # Define concentration at previous timestep
         C_old = self._concentration[:]
         
         # Map concentration from nodes to links (following soil flux direction)
+        # Does this overwrite fixed-value/gradient links?
         self._grid.at_link['C'] = map_value_at_max_node_to_link(
             self._grid,'topographic__elevation','sed_property__concentration'
             )
-        # Replace values with zero for all links that are NOT active links
-        # NOTE: this might be a problem if someone wants to use fixed-value 
-        # or fixed-gradient links. I don't know if the above mapping will 
-        # overwrite those values. Certainly the below will!
-        self._grid.at_link['C'][np.where(self._grid.status_at_link!=0)] = 0
-        
+        # Replace values with zero for all INACTIVE links
+        self._grid.at_link['C'][self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
+       
         # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0
+        self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0.0
         
         # Calculate QC at links (sediment flux times concentration)
         self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
                                     self._grid.at_link['C'][:]
                                     )
-        
         # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0
+        self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0.0
         
         # Calculate flux concentration divergence
         dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
         
-        # # Calculate other components of mass balance equation
+        # Calculate other components of mass balance equation
         C_local = C_old * (self._soil__depth_old/self._soil__depth)
         C_from_weathering = self._C_br * (self._soil_prod_rate * dt)/self._soil__depth
         Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
         Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
         # Calculate concentration
-        self._concentration[:] = (C_local + C_from_weathering 
-                                + (dt/self._soil__depth) * (- dQCdx)
-                                + Production - Decay
-                                )
+        self._concentration[:] = (C_local 
+                                  + C_from_weathering 
+                                  + (dt/self._soil__depth) 
+                                  * (- dQCdx)
+                                  + Production 
+                                  - Decay
+                                  )
                 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth[:]
