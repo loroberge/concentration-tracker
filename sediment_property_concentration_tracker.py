@@ -136,7 +136,7 @@ class ConcentrationTracker(Component):
         
         # get reference to inputs
         self._soil__depth = self._grid.at_node["soil__depth"]
-        self._soil__depth_old = self._soil__depth[:]
+        self._soil__depth_old = self._soil__depth.copy()
         self._soil_prod_rate = self._grid.at_node["soil_production__rate"]
         self._flux = self._grid.at_link["soil__flux"]
         
@@ -146,26 +146,13 @@ class ConcentrationTracker(Component):
         # Define concentration field
         self._concentration = grid.at_node["sed_property__concentration"]
         
-        # # Sediment property concentration field (at nodes)
-        # if "sed_property__concentration" in grid.at_node:
-        #     self._concentration = grid.at_node["sed_property__concentration"]
-        # else:
-        #     self._concentration = grid.add_zeros(
-        #         "sed_property__concentration", at="node", dtype=float
-        #         )
-        #     self._concentration[:] += self._C_init
-        
         # Sediment property concentration field (at links, to calculate dQCdx)
-        # QUESTION: Is this the right way to set up this field?
-        # It is only used for internal calculations and is overwritten at each use.
         if "C" in grid.at_link:
             self._C_links = grid.at_link["C"]
         else:
             self._C_links = grid.add_zeros("C", at="link", dtype=float)
         
         # Sediment property mass field (at links, to calculate dQCdx)
-        # QUESTION: Is this the right way to set up this field?
-        # It is only used for internal calculations and is overwritten at each use.
         if "QC" in grid.at_link:
             self._QC_links = grid.at_link["QC"]
         else:
@@ -245,14 +232,14 @@ class ConcentrationTracker(Component):
         self._grid.at_link['C'][self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
        
         # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0.0
+        #self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0.0
         
         # Calculate QC at links (sediment flux times concentration)
         self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
                                     self._grid.at_link['C'][:]
                                     )
         # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0.0
+        #self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0.0
         
         # Calculate flux concentration divergence
         dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
@@ -266,8 +253,7 @@ class ConcentrationTracker(Component):
         # Calculate concentration
         self._concentration[:] = (C_local 
                                   + C_from_weathering 
-                                  + (dt/self._soil__depth) 
-                                  * (- dQCdx)
+                                  + (dt/self._soil__depth) * (- dQCdx)
                                   + Production 
                                   - Decay
                                   )
