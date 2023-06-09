@@ -234,7 +234,7 @@ class ConcentrationTracker(Component):
         """
                 
         # Define concentration at previous timestep
-        C_old = self._concentration[:]
+        C_old = self._concentration.copy()
         
         # Map concentration from nodes to links (following soil flux direction)
         # Does this overwrite fixed-value/gradient links?
@@ -273,7 +273,7 @@ class ConcentrationTracker(Component):
                                   )
                 
         # Update old soil depth to new value
-        self._soil__depth_old = self._soil__depth[:]
+        self._soil__depth_old = self._soil__depth.copy()
 
 
     def run_one_step(self, dt):
