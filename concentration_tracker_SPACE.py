@@ -187,42 +187,19 @@ class ConcentrationTrackerSPACE(Component):
         self._D = return_array_at_node(self._grid, new_val)
 
 
-    def concentration_bed(self, dt):
-        """Calculate change in concentration in sediment on the bed for a 
-        time period 'dt'.
+    # def concentration_bed(self, dt):
+    #     """Calculate change in concentration in sediment on the bed for a 
+    #     time period 'dt'.
 
-        Parameters
-        ----------
+    #     Parameters
+    #     ----------
 
-        dt: float (time)
-            The imposed timestep.
-        """
-        
-        # COLLECT THE FOLLOWING FROM SPACE WHEN IT RUNS ONE STEP
-        
-        D_sw = 1
-        E_s = 1
-        
-        # Define concentration at previous timestep
-        C_s_old = self._concentration.copy()
-        
-        # Calculate other components of mass balance equation
-        C_local = C_s_old * (self._soil__depth_old/self._soil__depth)
-        Ero_depo = self._C_sw * D_sw - C_s_old * E_s
-        Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
-        
-        # Calculate concentration
-        self._concentration[:] = (C_local 
-                                  + (dt/self._soil__depth) * Ero_depo
-                                  + Production 
-                                  - Decay
-                                  )
-                
-        # Update old soil depth to new value
-        self._soil__depth_old = self._soil__depth.copy()
+    #     dt: float (time)
+    #         The imposed timestep.
+    #     """
 
-    def concentration_watercolumn(self, dt):
+
+    def concentration_watercolumn_and_bed(self, dt):
         """Calculate change in concentration within sediment transported in
         the water column for a time period 'dt'.
 
@@ -234,26 +211,53 @@ class ConcentrationTrackerSPACE(Component):
         """
         # COLLECT THE FOLLOWING FROM SPACE WHEN IT RUNS ONE STEP
         
-        D_sw = 1
-        E_s = 1
-        Qs_in
-        Qs_out
         
+        Qs_in = self._grid.at_node['sediment__influx']
+        Qs_out = self._mg.at_node['sediment__outflux']
+        E_s = sp._Es
+        E_r = sp._Er
+        D_sw = Qs_in - (Qs_out + E_s + E_r)
+
         # Define concentration at previous timestep
         C_s_old = self._concentration.copy()
         
-        # Calculate other components of mass balance equation
-        Qs_term = dx/self._Qs_in
-        SUM = __________
-        Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
+        # Calculate mass balance terms that don't need downstream iteration
+        WC_Qs_term = dx/Qs_in
+        BED_C_local = C_s_old * (self._soil__depth_old/self._soil__depth)
+        BED_Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
+        BED_Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
-        # Calculate concentration
-        self._concentration[:] = (Qs_term * SUM 
-                                  + Production 
-                                  - Decay
-                                  )
+        # I don't think P & D should occur in fluxing sed, since it is already
+        # happening in the sediment layer below, which is interacting with Q
         
+        # WC_Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
+        # WC_Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
+        
+
+        for node_id in stack:
+            WC_C_int_us[node_id] = (C_s[node_id]*E_s[node_id]
+                                    + C_r[node_id]*E_r[node_id]
+                                    - C_sw[node_id]*D_sw[node_id]
+                                    )
+            # Calculate concentration
+            self._C_sw[node_id] = Qs_term * SUM
+                                 # + Production
+                                 # - Decay
+                             
+            BED_Ero_depo[node_id] = (self._C_sw[node_id] * D_sw[node_id]
+                                     - C_s_old[node_id] * E_s[node_id])
+                         
+                         
+
+            # Calculate concentration
+            self._concentration[:] = (C_local 
+                                      + (dt/self._soil__depth) * Ero_depo
+                                      + Production 
+                                      - Decay
+                                      )
+                                 
+        # Update old soil depth to new value
+        self._soil__depth_old = self._soil__depth.copy()
         
         
     def run_one_step(self, dt):
