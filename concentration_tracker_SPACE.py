@@ -130,7 +130,6 @@ class ConcentrationTrackerSPACE(Component):
         
         # Define variables used for internal calculations
         self._C_sw = np.zeros(self._grid.number_of_nodes)
-        self._C_s = np.zeros(self._grid.number_of_nodes)
         self._QsCsw_in = np.zeros(self._grid.number_of_nodes)
         self._BED_ero_depo = np.zeros(self._grid.number_of_nodes)
         self._WC_C_int_term = np.zeros(self._grid.number_of_nodes)
@@ -210,15 +209,15 @@ class ConcentrationTrackerSPACE(Component):
         Qs_in = self._grid.at_node['sediment__influx']
         Qs_out = self._grid.at_node['sediment__outflux']
         q = SPACE._q
-        E_s = SPACE._Es*cell_area
-        E_r = SPACE._Er*cell_area
-        D_sw = Qs_in + E_s + E_r - Qs_out
+        E_s = SPACE._Es
+        E_r = SPACE._Er
+        D_sw = (Qs_in/cell_area) + E_s + E_r - (Qs_out/cell_area)
 
         # Define concentration at previous timestep
-        C_s_old = self._concentration.copy()*cell_area
+        C_s_old = self._concentration.copy()
         
         # Calculate mass balance terms that don't need downstream iteration
-        self._WC_Qs_term[Qs_in>0] = self._grid.dx/Qs_in[Qs_in>0]
+        self._WC_Qs_term[Qs_in>0] = cell_area/Qs_in[Qs_in>0]
         self._WC_Qs_term[Qs_in<=0] = 0
         BED_C_local = C_s_old * (self._soil__depth_old/self._soil__depth)
         BED_Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
@@ -256,7 +255,7 @@ class ConcentrationTrackerSPACE(Component):
             self._BED_ero_depo[node_id] = (self._C_sw[node_id] * D_sw[node_id]
                                      - C_s_old[node_id] * E_s[node_id])
             # Calculate bed concentration
-            self._C_s[node_id] = (BED_C_local[node_id]
+            self._concentration[node_id] = (BED_C_local[node_id]
                                   + (dt/self._soil__depth[node_id])
                                   * self._BED_ero_depo[node_id]
                                   + BED_Production[node_id]
@@ -264,7 +263,7 @@ class ConcentrationTrackerSPACE(Component):
                                   )
             
             # Calculate watercolumn concentration term (using bed concentration)
-            self._WC_C_int_term[node_id] = (self._C_s[node_id]*E_s[node_id]
+            self._WC_C_int_term[node_id] = (self._concentration[node_id]*E_s[node_id]
                                             + self.C_br[node_id]*E_r[node_id]
                                             - self._C_sw[node_id]*D_sw[node_id]
                                             )
@@ -275,9 +274,6 @@ class ConcentrationTrackerSPACE(Component):
             
             # Send QC values to flow receiver nodes
             self._QsCsw_in[flow_receivers[node_id]] += Qs_out[node_id] * self._C_sw[node_id]
-
-        # Calculate bed concentration per unit volume
-        self._concentration = self._C_s.copy()/cell_area
 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
