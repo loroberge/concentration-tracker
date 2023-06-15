@@ -129,7 +129,7 @@ class ConcentrationTracker(Component):
         # Store grid and parameters
            
         # use setters for C_init, C_br, P, and D defined below
-        self.C_init = concentration_initial
+        self.C_init = concentration_initial*self._grid.dx*self._grid.dy
         self.C_br = concentration_in_bedrock
         self.P = local_production_rate
         self.D = local_decay_rate
@@ -143,8 +143,12 @@ class ConcentrationTracker(Component):
         # create outputs if necessary and get reference.
         self.initialize_output_fields()
         
-        # Define concentration field
-        self._concentration = grid.at_node["sed_property__concentration"]
+        # Define concentration field (if all zeros, then add C_init)
+        if not self._grid.at_node["sed_property__concentration"].any():
+            self._grid.at_node["sed_property__concentration"] += self.C_init
+        self._concentration = self._grid.at_node["sed_property__concentration"]
+        # NOTE: not sure if this is how to do it... I guess I need the above 
+        # lines for C_br, P, and D as well...
         
         # Sediment property concentration field (at links, to calculate dQCdx)
         if "C" in grid.at_link:
