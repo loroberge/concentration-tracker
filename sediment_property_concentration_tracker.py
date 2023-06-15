@@ -99,7 +99,7 @@ class ConcentrationTracker(Component):
             "optional": False,
             "units": "kg/m^3",
             "mapping": "node",
-            "doc": "Mass concentration of property per volume of sediment",
+            "doc": "Mass concentration of property per unit volume of sediment",
         }
     }
 
@@ -129,7 +129,7 @@ class ConcentrationTracker(Component):
         # Store grid and parameters
            
         # use setters for C_init, C_br, P, and D defined below
-        self.C_init = concentration_initial*self._grid.dx*self._grid.dy
+        self.C_init = concentration_initial
         self.C_br = concentration_in_bedrock
         self.P = local_production_rate
         self.D = local_decay_rate
