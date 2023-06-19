@@ -201,7 +201,7 @@ class ConcentrationTrackerSPACE(Component):
 
     def concentration_watercolumn_and_bed(self, dt):
         """Calculate change in concentration within sediment transported in
-        the water column for a time period 'dt'.
+        the water column and within sediment on the bed for a time period 'dt'.
 
         Parameters
         ----------
