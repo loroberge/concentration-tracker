@@ -216,11 +216,12 @@ class ConcentrationTrackerSPACE(Component):
         v_s = self._sp._v_s
         q = self._sp._q
         Es = self._sp.Es
+        Er = self._sp.Er
         D_sw = v_s*self._Qs_out/q
 
         # Calculate WC mass balance terms that don't need downstream iteration
-        WC_Es_term = (1-phi)*self._sp._Es*self._cell_area
-        WC_Er_term = (1-F_f)*self._sp._Er*self._cell_area
+        WC_Es_term = (1-phi)*Es*self._cell_area
+        WC_Er_term = (1-F_f)*Er*self._cell_area
         WC_denominator_term = 1 + v_s*self._cell_area/q
         
         # Calculate BED mass balance terms that don't need downstream iteration
