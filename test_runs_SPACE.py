@@ -137,7 +137,8 @@ QC_out = np.zeros(ndt)
 QC_out2 = np.zeros(ndt)
 Q_out = np.zeros(ndt)
 Vol_removed = np.zeros(ndt)
-C_removed = np.zeros(ndt)
+C_change = np.zeros(ndt)
+C_from_bedrock = np.zeros(ndt)
 
 E_sed = np.zeros([ndt,len(core_ids)])    
 E_br = np.zeros([ndt,len(core_ids)])    
@@ -211,7 +212,8 @@ for i in range(ndt):
     # Old topo and concentration
     topo_old = mg.at_node['topographic__elevation'][mg.core_nodes].copy()
     C_old = mg.at_node['sed_property__concentration'][mg.core_nodes].copy()
-    
+    H_old = mg.at_node['soil__depth'][mg.core_nodes].copy()    
+
     # Add uplift
     mg.at_node['bedrock__elevation'][mg.core_nodes] += uplift_per_step
     
@@ -235,6 +237,7 @@ for i in range(ndt):
     # New topo and concentration
     topo_new = mg.at_node['topographic__elevation'][mg.core_nodes].copy()    
     C_new = mg.at_node['sed_property__concentration'][mg.core_nodes].copy()    
+    H_new = mg.at_node['soil__depth'][mg.core_nodes].copy()    
     
     # Collect stats
     
@@ -251,23 +254,26 @@ for i in range(ndt):
     C_on_grid[i] = np.sum(mg.at_node['sed_property__concentration'][mg.core_nodes]
                         * mg.at_node['soil__depth'][mg.core_nodes])*dx*dy
     QC_out[i] = ctSP._QsCsw_out[node_next_to_outlet]
-    QC_out2[i] = QC_out[i-1]+ ctSP._QsCsw_out[node_next_to_outlet]
+    #QC_out2[i] = QC_out[i-1]+ ctSP._QsCsw_out[node_next_to_outlet]
     Q_out[i] = mg.at_node['sediment__outflux'][node_next_to_outlet]*dt
     C_in_flux[i] = np.sum(ctSP._QsCsw_in[mg.core_nodes])
     Vol_removed[i] = (dx*dy*np.sum(topo_old)
                       - dx*dy*np.sum(topo_new - uplift_per_step)
                       )
-    C_removed[i] = dx*dy*np.sum(C_old) - dx*dy*np.sum(C_new)
+    C_change[i] = dx*dy*np.sum(C_old*H_old) - dx*dy*np.sum(C_new*H_new)
+    C_from_bedrock[i] = dx*dy*np.sum(sp.Er[mg.core_nodes]*ctSP.C_br[mg.core_nodes])
+    C_balance = C_change - (QC_out - C_from_bedrock)
+    # C_balance = C_change - (QC_out + C_in_flux)
+
     Vol_balance = Vol_removed - Q_out
-    C_balance = C_removed - (QC_out + C_in_flux)
-    C_balance2 = C_on_grid + QC_out
+
     
 # %%
 
-plt.figure()
-plt.plot(T,C_sw_outlet,label="Concentration in water column entering outlet")
-plt.legend()
-plt.show()
+# plt.figure()
+# plt.plot(T,C_sw_outlet,label="Concentration in water column entering outlet")
+# plt.legend()
+# plt.show()
 
 plt.figure()
 plt.plot(T,C_balance,label="Concentration balance on grid")
