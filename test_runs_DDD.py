@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 from landlab import RasterModelGrid, imshow_grid
 from landlab.components import ExponentialWeatherer, DepthDependentDiffuser
 
-from concentration_tracker_DDD import ConcentrationTracker
+from concentration_tracker_DDD import ConcentrationTrackerDDD
 
 # %% Filter warnings
 warnings.filterwarnings('ignore')
@@ -97,7 +97,7 @@ ew = ExponentialWeatherer(mg,
 
 ddd = DepthDependentDiffuser(mg)
 
-ctDDD = ConcentrationTracker(mg,
+ctDDD = ConcentrationTrackerDDD(mg,
                              concentration_initial=C,
                              concentration_in_bedrock=C_br,
                              local_production_rate=P,
@@ -192,11 +192,11 @@ for i in range(ndt):
     
     T[i] = elapsed_time
     
-    # plot_hill_profile()
+    plot_hill_profile()
 
-    if i*dt % 10 == 0:
+    # if i*dt % 10 == 0:
         
-        plot_hill_profile()
+    #     plot_hill_profile()
         
         # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
         # plt.show()

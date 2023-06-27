@@ -31,7 +31,7 @@ ncols = 50
 dx = 10
 dy = dx
 dt = 1
-total_t = 500
+total_t = 800
 U = 0.001
 
 H_init = 0.1
@@ -42,7 +42,7 @@ n_sp = 1.0
 F_f = 0.0
 phi = 0.0
 H_star = 0.1
-v_s = 0.1
+v_s = 2
 
 grid_seed = 7
 
@@ -144,7 +144,7 @@ E_sed = np.zeros([ndt,len(core_ids)])
 E_br = np.zeros([ndt,len(core_ids)])    
 E_total = np.zeros([ndt,len(core_ids)])   
 
-ymax = 2.5
+ymax = 1.5
 
 # Set colour maps for plotting
 cmap_terrain = mpl.cm.get_cmap("terrain").copy()
@@ -270,10 +270,10 @@ for i in range(ndt):
     
 # %%
 
-# plt.figure()
-# plt.plot(T,C_sw_outlet,label="Concentration in water column entering outlet")
-# plt.legend()
-# plt.show()
+plt.figure()
+plt.plot(T,C_sw_outlet,label="Concentration in water column entering outlet")
+plt.legend()
+plt.show()
 
 plt.figure()
 plt.plot(T,C_balance,label="Concentration balance on grid")

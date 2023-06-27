@@ -26,9 +26,9 @@ ncols = 10
 
 dx = 1
 dy = dx
-dt = 0.1
+dt = 1
 
-total_t = 10
+total_t = 1
 ndt = int(total_t // dt)
 
 C_initial = 0.75
@@ -40,14 +40,14 @@ D = 0
 # Parameters for 
 
 # Parameters for BedrockLandslider
-tLS = 100
+tLS = 0.01
 F_f_LS = 0
 phi = 0
 
 
 # Calculated from user inputs
 n_core_nodes = (nrows-2)*(ncols-2)
-total_t = total_t + dt
+total_t = total_t #+ dt
 ndt = int(total_t // dt)
 hill_bottom_node = ncols
 node_next_to_hill_bottom = ncols+1
@@ -65,11 +65,12 @@ mg.set_status_at_node_on_edges(right=4,
 # Soil depth
 _ = mg.add_zeros('soil__depth', at='node', units= ['m','m'])
 mg.at_node['soil__depth'] += 1.5 # mg.node_x/4 
+mg.at_node['soil__depth'][mg.node_x > dx*ncols/2] += 8
 
 # Bedrock elevation
 _ = mg.add_zeros('bedrock__elevation', at='node', units= ['m','m'])
 mg.at_node['bedrock__elevation'] += mg.node_x/50
-mg.at_node['bedrock__elevation'][mg.node_x > 2*dx*ncols/3] += 8
+#mg.at_node['bedrock__elevation'][mg.node_x > dx*ncols/2] += 8
 
 # Topographic elevation
 _ = mg.add_zeros('topographic__elevation', at='node', units= ['m','m'])
@@ -89,24 +90,25 @@ n_core_nodes = len(mg.core_nodes)
 
 fr = PriorityFloodFlowRouter(mg,
                              accumulate_flow_hill=True,
-                             separate_hill_flow=False,
+                             separate_hill_flow=True,
                              update_hill_depressions=False,
                              update_hill_flow_instantaneous=True,
                              hill_flow_metric='Quinn',
                              )
 fr.run_one_step()
 
-br = BedrockLandslider(mg,
+ls = BedrockLandslider(mg,
                        landslides_return_time=tLS,
                        fraction_fines_LS=F_f_LS,
                        phi=phi,
                        verbose_landslides=True,
                        landslides_on_boundary_nodes=False,
                        critical_sliding_nodes=None,
+                       output_landslide_node_ids=True,
                        )
 
-ctBR = ConcentrationTrackerBRLS(mg,
-                                br,
+ctLS = ConcentrationTrackerBRLS(mg,
+                                ls,
                                 concentration_initial=C,
                                 concentration_in_bedrock=C_br,
                                 local_production_rate=P,
@@ -122,7 +124,7 @@ record_M_total_links = np.zeros(ndt)
 record_M_out = np.zeros(ndt)
 record_H_total_nodes = np.zeros(ndt)
 
-ymax = np.max(mg.at_node["topographic__elevation"][core_ids])+0.5
+ymax = np.max(mg.at_node["topographic__elevation"][core_ids])+1
 
 # Set colour maps for plotting
 cmap_terrain = mpl.cm.get_cmap("terrain").copy()
@@ -203,19 +205,20 @@ for i in range(ndt):
     # Run DepthDependentDiffuser
     fr.run_one_step()
     
+    # Run BedrockLandslider
+    ls.run_one_step(dt=dt)
+        
     # Calculate concentration
-    br.run_one_step(dt=dt)
+    C_eroded = ctLS.run_one_step(dt=dt)
     
-    ctBR.run_one_step(dt=dt)
-    
-    # plot_hill_profile()
+    plot_hill_profile()
 
-    if i*dt % 10 == 0:
+    # if i*dt % 10 == 0:
         
-        plot_hill_profile()
+    #     plot_hill_profile()
         
-        # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
-        # plt.show()
+    #     # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
+    #     # plt.show()
     
     # New topo and concentration
     topo_new = mg.at_node['topographic__elevation'][mg.core_nodes].copy()    
@@ -225,11 +228,11 @@ for i in range(ndt):
     
     T[i] = elapsed_time
         
-    record_M_total_nodes[i] = np.sum(mg.at_node['sed_property__concentration'][mg.core_nodes] * 
-                                mg.at_node['soil__depth'][mg.core_nodes]
-                                )
-    record_M_total_links[i] = np.sum(mg.at_link['QC'])
-    record_H_total_nodes[i] = np.sum(mg.at_node['soil__depth'][core_ids])
+    # record_M_total_nodes[i] = np.sum(mg.at_node['sed_property__concentration'][mg.core_nodes] * 
+    #                             mg.at_node['soil__depth'][mg.core_nodes]
+    #                             )
+    # record_M_total_links[i] = np.sum(mg.at_link['QC'])
+    # record_H_total_nodes[i] = np.sum(mg.at_node['soil__depth'][core_ids])
     #record_M_at_each_node[:,i] = mg.at_node['sed_property__concentration'][core_ids]
 
     
