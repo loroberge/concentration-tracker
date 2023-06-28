@@ -296,6 +296,13 @@ class ConcentrationTrackerBRLS(Component):
             )
             ### CHECK THAT THIS ALLOWS FOR MULTIPLE LANDSLIDES DEPOSITING 
             ### ON TOP OF EACH OTHER DURING ONE TIMESTEP
+            
+        # Replace nan values with zeros where that soil depth is zero
+        idx_nans = np.isnan(self._concentration)
+        idx_zero_soil = self._soil__depth==0
+        self._concentration[idx_nans & idx_zero_soil] = 0
+        
+        # This deals with nans caused by a divide by zero in the previous 2 equations
         
         # Check that deposited and eroded C and V are balanced
         from numpy import testing
