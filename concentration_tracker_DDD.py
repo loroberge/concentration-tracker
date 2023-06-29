@@ -36,11 +36,15 @@ class ConcentrationTrackerDDD(Component):
     >>> from landlab.components import ConcentrationTracker
     >>> ... SIMPLE EXAMPLE
     
-    Now for a 1-D normal fault scarp undergoing hillslope diffusion:
+    Now for a 1-D hillslope:
 
     >>> ... EXAMPLE  
     
-    Now, a 2-D landscape with stream channels and hillslopes.
+    1-D scarp:
+        
+    >>> ... EXAMPLE  
+        
+    Now, a 2-D scarp landscape.
 
     >>> ... EXAMPLE  
 
@@ -100,7 +104,39 @@ class ConcentrationTrackerDDD(Component):
             "units": "kg/m^3",
             "mapping": "node",
             "doc": "Mass concentration of property per unit volume of sediment",
-        }
+        },
+        "sed_property_mass__flux": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg",
+            "mapping": "link",
+            "doc": "Mass of property fluxing along links",
+        },
+        "bedrock_property__concentration": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3",
+            "mapping": "node",
+            "doc": "Mass concentration of property per unit volume of bedrock",
+        },
+        "sed_property__production_rate": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3/yr",
+            "mapping": "node",
+            "doc": "Production rate of property per unit volume of sediment per time",
+        },
+        "sed_property__decay_rate": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3/yr",
+            "mapping": "node",
+            "doc": "Decay rate of property per unit volume of sediment per time",
+        },
     }
 
     def __init__(self, 
@@ -147,20 +183,27 @@ class ConcentrationTrackerDDD(Component):
         if not self._grid.at_node["sed_property__concentration"].any():
             self._grid.at_node["sed_property__concentration"] += self.C_init
         self._concentration = self._grid.at_node["sed_property__concentration"]
-        # NOTE: not sure if this is how to do it... I guess I need the above 
-        # lines for C_br, P, and D as well...
+        
+        if not self._grid.at_node["bedrock_property__concentration"].any():
+            self._grid.at_node["bedrock_property__concentration"] += self.C_br
+        self.C_br = self._grid.at_node["bedrock_property__concentration"]
+        
+        if not self._grid.at_node["sed_property__production_rate"].any():
+            self._grid.at_node["sed_property__production_rate"] += self.P
+        self.P = self._grid.at_node["sed_property__production_rate"]
+        
+        if not self._grid.at_node["sed_property__decay_rate"].any():
+            self._grid.at_node["sed_property__decay_rate"] += self.D
+        self.D = self._grid.at_node["sed_property__decay_rate"]
+
+        # return_array_at_node()
+        # return_array_at_link()
         
         # Sediment property concentration field (at links, to calculate dQCdx)
-        if "C" in grid.at_link:
-            self._C_links = grid.at_link["C"]
-        else:
-            self._C_links = grid.add_zeros("C", at="link", dtype=float)
+        self._C_links = np.zeros(self._grid.number_of_links)
         
         # Sediment property mass field (at links, to calculate dQCdx)
-        if "QC" in grid.at_link:
-            self._QC_links = grid.at_link["QC"]
-        else:
-            self._QC_links = grid.add_zeros("QC", at="link", dtype=float)
+        self._QC_links = self._grid.at_link["sed_property_mass__flux"]
         
         # Check that concentration values are within physical limits
         if isinstance(concentration_initial, np.ndarray):
@@ -235,15 +278,10 @@ class ConcentrationTrackerDDD(Component):
         # Replace values with zero for all INACTIVE links
         self._grid.at_link['C'][self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
        
-        # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        #self._grid.at_link['C'][np.isnan(self._grid.at_link['C'])] = 0.0
-        
         # Calculate QC at links (sediment flux times concentration)
         self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
                                     self._grid.at_link['C'][:]
                                     )
-        # Replace nan values with zeros (DOUBLE CHECK IF THIS IS NECESSARY)
-        #self._grid.at_link['QC'][np.isnan(self._grid.at_link['QC'])] = 0.0
         
         # Calculate flux concentration divergence
         dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
@@ -271,7 +309,6 @@ class ConcentrationTrackerDDD(Component):
                 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
-
 
 
     def run_one_step(self, dt):
