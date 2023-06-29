@@ -284,26 +284,22 @@ class ConcentrationTrackerBRLS(Component):
         self._erode_nodes_all = self._grid.core_nodes[self._grid.at_node["landslide__erosion"][self._grid.core_nodes]>0]
         self._deposit_nodes_all = self._grid.core_nodes[self._grid.at_node["landslide__deposition"][self._grid.core_nodes]>0]
 
-        # Calculate new concentration values for eroded nodes
-        self._concentration[self._erode_nodes_all] = (
-            (self._CV_old[self._erode_nodes_all] - self._CV_sed_eroded[self._erode_nodes_all])
-            / (self._soil__depth[self._erode_nodes_all] * self._cell_area)
-            )
-        
-        # Calculate new concentration values for deposited nodes
-        self._concentration[self._deposit_nodes_all] = (
-            (self._CV_old[self._deposit_nodes_all] + self._CV_sed_dep[self._deposit_nodes_all])
-            / (self._soil__depth[self._deposit_nodes_all] * self._cell_area)
-            )
-            ### CHECK THAT THIS ALLOWS FOR MULTIPLE LANDSLIDES DEPOSITING 
-            ### ON TOP OF EACH OTHER DURING ONE TIMESTEP
-            
+        # Calculate new concentration values for eroded and deposited nodes
+        with np.errstate(divide='ignore', invalid='ignore'):
+            self._concentration[self._erode_nodes_all] = (
+                (self._CV_old[self._erode_nodes_all] - self._CV_sed_eroded[self._erode_nodes_all])
+                / (self._soil__depth[self._erode_nodes_all] * self._cell_area)
+                )
+            self._concentration[self._deposit_nodes_all] = (
+                (self._CV_old[self._deposit_nodes_all] + self._CV_sed_dep[self._deposit_nodes_all])
+                / (self._soil__depth[self._deposit_nodes_all] * self._cell_area)
+                )
+                ### THIS DOES NOT ALLOW FOR MULTIPLE LANDSLIDES DEPOSITING 
+                ### ON TOP OF EACH OTHER DURING ONE TIMESTEP
+                
         # Replace nan values with zeros where that soil depth is zero
-        idx_nans = np.isnan(self._concentration)
-        idx_zero_soil = self._soil__depth==0
-        self._concentration[idx_nans & idx_zero_soil] = 0
-        
-        # This deals with nans caused by a divide by zero in the previous 2 equations
+        # (nans caused by a divide by zero in the previous 2 equations)
+        np.nan_to_num(self._concentration[self._soil__depth==0])
         
         # Check that deposited and eroded C and V are balanced
         # from numpy import testing
