@@ -263,11 +263,11 @@ class ConcentrationTrackerDDD(Component):
                                       - Decay
                                       )
             
-            np.nan_to_num(C_local[self._soil__depth==0])
-            np.nan_to_num(C_from_weathering[self._soil__depth==0])
-            np.nan_to_num(Production[self._soil__depth==0])
-            np.nan_to_num(Decay[self._soil__depth==0])
-            np.nan_to_num(self._concentration[self._soil__depth==0])
+        np.nan_to_num(C_local[self._soil__depth==0])
+        np.nan_to_num(C_from_weathering[self._soil__depth==0])
+        np.nan_to_num(Production[self._soil__depth==0])
+        np.nan_to_num(Decay[self._soil__depth==0])
+        np.nan_to_num(self._concentration[self._soil__depth==0])
                 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
