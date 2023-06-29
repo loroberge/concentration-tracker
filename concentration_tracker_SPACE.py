@@ -225,15 +225,15 @@ class ConcentrationTrackerSPACE(Component):
         WC_denominator_term = 1 + v_s*self._cell_area/q
         
         # Calculate BED mass balance terms that don't need downstream iteration
-        BED_C_local_term = self._concentration * (self._soil__depth_old/self._soil__depth)
-        BED_Production_term = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        BED_Decay_term = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            BED_C_local_term = self._concentration * (self._soil__depth_old/self._soil__depth)
+            BED_Production_term = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
+            BED_Decay_term = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
-        # I don't think P & D should occur in fluxing sed, since it is already
-        # happening in the bed sediment layer, which interacts w fluxing sed
-        # WC_Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        # WC_Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
-
+        np.nan_to_num(BED_C_local_term[self._soil__depth==0])
+        np.nan_to_num(BED_Production_term[self._soil__depth==0])
+        np.nan_to_num(BED_Decay_term[self._soil__depth==0])
+                
         # Get stack of node ids from top to bottom of channel network
         node_status = self._grid.status_at_node
         stack_flip_ud = np.flipud(self._grid.at_node["flow__upstream_node_order"])
@@ -275,13 +275,15 @@ class ConcentrationTrackerSPACE(Component):
                 )
             
             # Calculate BED concentration
-            self._concentration[node_id] = (BED_C_local_term[node_id]
-                                            + (dt/self._soil__depth[node_id])
-                                            * self._BED_ero_depo_term[node_id]
-                                            + BED_Production_term[node_id]
-                                            - BED_Decay_term[node_id]
-                                            )
-            
+            with np.errstate(divide='ignore', invalid='ignore'):
+                self._concentration[node_id] = (BED_C_local_term[node_id]
+                                                + (dt/self._soil__depth[node_id])
+                                                * self._BED_ero_depo_term[node_id]
+                                                + BED_Production_term[node_id]
+                                                - BED_Decay_term[node_id]
+                                                )
+            np.nan_to_num(self._concentration[self._soil__depth==0])
+
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
         
