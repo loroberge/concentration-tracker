@@ -249,21 +249,29 @@ class ConcentrationTrackerDDD(Component):
         dQCdx = self._grid.calc_flux_div_at_node(self._grid.at_link['QC'])
         
         # Calculate other components of mass balance equation
-        C_local = C_old * (self._soil__depth_old/self._soil__depth)
-        C_from_weathering = self._C_br * (self._soil_prod_rate * dt)/self._soil__depth
-        Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
-        Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
+        with np.errstate(divide='ignore', invalid='ignore'):
+            C_local = C_old * (self._soil__depth_old/self._soil__depth)
+            C_from_weathering = self._C_br * (self._soil_prod_rate * dt)/self._soil__depth
+            Production = (dt*self._P/2) * (self._soil__depth_old/self._soil__depth + 1)
+            Decay = (dt*self._D/2) * (self._soil__depth_old/self._soil__depth + 1)
         
-        # Calculate concentration
-        self._concentration[:] = (C_local 
-                                  + C_from_weathering 
-                                  + (dt/self._soil__depth) * (- dQCdx)
-                                  + Production 
-                                  - Decay
-                                  )
+            # Calculate concentration
+            self._concentration[:] = (C_local 
+                                      + C_from_weathering 
+                                      + (dt/self._soil__depth) * (- dQCdx)
+                                      + Production 
+                                      - Decay
+                                      )
+            
+            np.nan_to_num(C_local[self._soil__depth==0])
+            np.nan_to_num(C_from_weathering[self._soil__depth==0])
+            np.nan_to_num(Production[self._soil__depth==0])
+            np.nan_to_num(Decay[self._soil__depth==0])
+            np.nan_to_num(self._concentration[self._soil__depth==0])
                 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
+
 
 
     def run_one_step(self, dt):
