@@ -88,7 +88,31 @@ class ConcentrationTrackerSPACE(Component):
             "units": "kg/m^3",
             "mapping": "node",
             "doc": "Mass concentration of property per unit volume of sediment",
-        }
+        },
+        "bedrock_property__concentration": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3",
+            "mapping": "node",
+            "doc": "Mass concentration of property per unit volume of bedrock",
+        },
+        "sed_property__production_rate": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3/yr",
+            "mapping": "node",
+            "doc": "Production rate of property per unit volume of sediment per time",
+        },
+        "sed_property__decay_rate": {
+            "dtype": float,
+            "intent": "out",
+            "optional": False,
+            "units": "kg/m^3/yr",
+            "mapping": "node",
+            "doc": "Decay rate of property per unit volume of sediment per time",
+        },
     }
 
     def __init__(self, 
@@ -144,8 +168,18 @@ class ConcentrationTrackerSPACE(Component):
         if not self._grid.at_node["sed_property__concentration"].any():
             self._grid.at_node["sed_property__concentration"] += self.C_init
         self._concentration = self._grid.at_node["sed_property__concentration"]
-        # NOTE: not sure if this is how to do it... I guess I need the above 
-        # lines for C_br, P, and D as well...
+
+        if not self._grid.at_node["bedrock_property__concentration"].any():
+            self._grid.at_node["bedrock_property__concentration"] += self.C_br
+        self.C_br = self._grid.at_node["bedrock_property__concentration"]
+        
+        if not self._grid.at_node["sed_property__production_rate"].any():
+            self._grid.at_node["sed_property__production_rate"] += self.P
+        self.P = self._grid.at_node["sed_property__production_rate"]
+        
+        if not self._grid.at_node["sed_property__decay_rate"].any():
+            self._grid.at_node["sed_property__decay_rate"] += self.D
+        self.D = self._grid.at_node["sed_property__decay_rate"]
         
         # Check that concentration values are within physical limits
         if isinstance(concentration_initial, np.ndarray):
