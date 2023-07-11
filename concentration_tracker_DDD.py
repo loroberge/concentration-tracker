@@ -96,7 +96,7 @@ class ConcentrationTrackerDDD(Component):
     ...                       0.44750673,  1.        ,  0.44750673,
     ...                       0.09648071,  0.44750673,  0.09648071 ]))
 
-
+▒
     References
     ----------
     **Required Software Citation(s) Specific to this Component**
@@ -349,12 +349,13 @@ class ConcentrationTrackerDDD(Component):
                                       + Production 
                                       - Decay
                                       )
-            
-        np.nan_to_num(C_local[self._soil__depth==0])
-        np.nan_to_num(C_from_weathering[self._soil__depth==0])
-        np.nan_to_num(Production[self._soil__depth==0])
-        np.nan_to_num(Decay[self._soil__depth==0])
-        np.nan_to_num(self._concentration[self._soil__depth==0])
+        
+        # Replace nan values (from dividing by zero soil depth)
+        np.nan_to_num(C_local, copy=False)
+        np.nan_to_num(C_from_weathering, copy=False)
+        np.nan_to_num(Production, copy=False)
+        np.nan_to_num(Decay, copy=False)
+        np.nan_to_num(self._concentration, copy=False)
                 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
