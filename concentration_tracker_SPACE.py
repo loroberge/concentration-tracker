@@ -316,7 +316,7 @@ class ConcentrationTrackerSPACE(Component):
                                                 + BED_Production_term[node_id]
                                                 - BED_Decay_term[node_id]
                                                 )
-            np.nan_to_num(self._concentration[self._soil__depth==0])
+            np.nan_to_num(self._concentration, copy=False)
 
         # Update old soil depth to new value
         self._soil__depth_old = self._soil__depth.copy()
