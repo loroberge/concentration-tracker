@@ -29,24 +29,73 @@ class ConcentrationTrackerDDD(Component):
 
     Examples
     --------
+    A 1-D hillslope:
+        
     >>> import numpy as np
     >>> from landlab import RasterModelGrid
-    >>> from landlab.components import ExponentialWeatherer
     >>> from landlab.components import DepthDependentDiffuser
-    >>> from landlab.components import ConcentrationTracker
-    >>> ... SIMPLE EXAMPLE
-    
-    Now for a 1-D hillslope:
+    >>> from landlab.components import ConcentrationTrackerForDiffusion
+    >>> mg = RasterModelGrid((3, 5),xy_spacing=2.)
+    >>> mg.set_status_at_node_on_edges(right=4, top=4, left=4, bottom=4)
+    >>> mg.status_at_node[5] = mg.BC_NODE_IS_FIXED_VALUE
+    >>> c = mg.add_zeros('sed_property__concentration', at='node')
+    >>> h = mg.add_zeros("soil__depth", at="node")
+    >>> z_br = mg.add_zeros("bedrock__elevation", at="node")
+    >>> z = mg.add_zeros("topographic__elevation", at="node")
+    >>> _ = mg.add_zeros('soil_production__rate', at='node')
+    >>> c[8] += 1
+    >>> h += mg.node_x
+    >>> z_br += mg.node_x
+    >>> z += z_br + h
+    >>> ddd = DepthDependentDiffuser(mg)
+    >>> ct = ConcentrationTrackerForDiffusion(mg)
+    >>> ddd.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([4.11701964, 8.01583689, 11.00247875]))
+    >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
+    ...             np.array([0., 0.24839685, 1.]))
+   
+    Now, a 2-D pyramid-shaped hillslope.
 
-    >>> ... EXAMPLE  
+    >>> mg = RasterModelGrid((5, 5),xy_spacing=2.)
+    >>> c = mg.add_zeros('sed_property__concentration', at='node')
+    >>> h = mg.add_zeros("soil__depth", at="node")
+    >>> z_br = mg.add_zeros("bedrock__elevation", at="node")
+    >>> z = mg.add_zeros("topographic__elevation", at="node")
+    >>> _ = mg.add_zeros('soil_production__rate', at='node')
+    >>> c[12] += 1
+    >>> h += 2
+    >>> z_br += 8
+    >>> z_br -= abs(4 - mg.node_x)
+    >>> z_br -= abs(4 - mg.node_y)
+    >>> z += z_br + h
+    >>> ddd = DepthDependentDiffuser(mg)
+    >>> ct = ConcentrationTrackerForDiffusion(mg)
+    >>> ddd.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([6.        ,  7.13533528,  6.        ,
+    ...                       7.13533528,  8.27067057,  7.13533528,
+    ...                       6.        ,  7.13533528,  6.         ]))
+    >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
+    ...             np.array([0.        ,  0.38079708,  0.        ,
+    ...                       0.38079708,  1.        ,  0.38079708,
+    ...                       0.        ,  0.38079708,  0.         ]))
     
-    1-D scarp:
-        
-    >>> ... EXAMPLE  
-        
-    Now, a 2-D scarp landscape.
+    And running one more step.
+    
+    >>> ddd.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([5.52060315,  6.62473963,  5.52060315,
+    ...                       6.62473963,  8.00144598,  6.62473963,
+    ...                       5.52060315,  6.62473963,  5.52060315 ]))
+    >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
+    ...             np.array([0.09648071,  0.44750673,  0.09648071,
+    ...                       0.44750673,  1.        ,  0.44750673,
+    ...                       0.09648071,  0.44750673,  0.09648071 ]))
 
-    >>> ... EXAMPLE  
 
     References
     ----------
@@ -272,15 +321,15 @@ class ConcentrationTrackerDDD(Component):
         
         # Map concentration from nodes to links (following soil flux direction)
         # Does this overwrite fixed-value/gradient links?
-        self._grid.at_link['C'] = map_value_at_max_node_to_link(
+        self._C_links = map_value_at_max_node_to_link(
             self._grid,'topographic__elevation','sed_property__concentration'
             )
         # Replace values with zero for all INACTIVE links
-        self._grid.at_link['C'][self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
+        self._C_links[self._grid.status_at_link == LinkStatus.INACTIVE] = 0.0
        
         # Calculate QC at links (sediment flux times concentration)
         self._grid.at_link['QC'] = (self._grid.at_link['soil__flux'][:]*
-                                    self._grid.at_link['C'][:]
+                                    self._C_links[:]
                                     )
         
         # Calculate flux concentration divergence
