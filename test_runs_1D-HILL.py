@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Mon Jun 19 16:27:13 2023
+Created on Thu Jun 29 12:37:49 2023
 
 @author: LaurentRoberge
 """
@@ -12,44 +12,52 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid, imshow_grid
-from landlab.components import PriorityFloodFlowRouter, BedrockLandslider
+from landlab.components import (ExponentialWeatherer,
+                                DepthDependentDiffuser,
+                                PriorityFloodFlowRouter,
+                                BedrockLandslider
+                                )
 
+from concentration_tracker_DDD import ConcentrationTrackerDDD
 from concentration_tracker_BRLS import ConcentrationTrackerBRLS
 
 # %% Filter warnings
 warnings.filterwarnings('ignore')
 
 # %% Define input parameters
-
 nrows = 3
-ncols = 10
+ncols = 50
 
-dx = 1
+dx = 10
 dy = dx
-dt = 1
+dt = 5
 
-total_t = 1
-ndt = int(total_t // dt)
+total_t = 15000
 
-C_initial = 0
-C_br = 0.75
+C_initial = 0.75
+C_br = 0
 
 P = 0
 D = 0
 
-# Parameters for 
+U = 0.001
+
+# Parameters for DDD
+soil_production_maximum_rate = 0.001
+soil_production_decay_depth = 1
 
 # Parameters for BedrockLandslider
-tLS = 0.001
+tLS = 100
 F_f_LS = 0
 phi = 0
-
+angle_int_frict = 0.3
 
 # Calculated from user inputs
-n_core_nodes = (nrows-2)*(ncols-2)
+uplift_per_step = U*dt
 total_t = total_t #+ dt
 ndt = int(total_t // dt)
 hill_bottom_node = ncols
+hill_bottom_link = (ncols*2)-1
 node_next_to_hill_bottom = ncols+1
 
 # %% Generate model grid from initial noise
@@ -60,17 +68,17 @@ mg.set_status_at_node_on_edges(right=4,
                                top=4,
                                left=4,
                                bottom=4)
-# mg.status_at_node[hill_bottom_node] = mg.BC_NODE_IS_FIXED_VALUE
+mg.status_at_node[hill_bottom_node] = mg.BC_NODE_IS_FIXED_VALUE
 
 # Soil depth
 _ = mg.add_zeros('soil__depth', at='node', units= ['m','m'])
-# mg.at_node['soil__depth'] += 1.5 # mg.node_x/4 
-#mg.at_node['soil__depth'][mg.node_x > dx*ncols/2] += 8
+#mg.at_node['soil__depth'] += 1.5 # mg.node_x/4 
+mg.at_node['soil__depth'][ncols + int(3*ncols/4)-1] += 2 
 
 # Bedrock elevation
 _ = mg.add_zeros('bedrock__elevation', at='node', units= ['m','m'])
 mg.at_node['bedrock__elevation'] += mg.node_x/50
-mg.at_node['bedrock__elevation'][mg.node_x > dx*ncols/2] += 8
+mg.at_node['bedrock__elevation'][mg.node_x > dx*ncols/2] += 30
 
 # Topographic elevation
 _ = mg.add_zeros('topographic__elevation', at='node', units= ['m','m'])
@@ -89,7 +97,6 @@ core_ids = np.append(hill_bottom_node, mg.core_nodes)
 n_core_nodes = len(mg.core_nodes)
 
 # %% Instantiate model components
-
 fr = PriorityFloodFlowRouter(mg,
                              accumulate_flow_hill=True,
                              separate_hill_flow=True,
@@ -99,15 +106,30 @@ fr = PriorityFloodFlowRouter(mg,
                              )
 fr.run_one_step()
 
+ew = ExponentialWeatherer(mg,
+                          soil_production_maximum_rate=soil_production_maximum_rate,
+                          soil_production_decay_depth=soil_production_decay_depth
+                          )
+
+ddd = DepthDependentDiffuser(mg)
+
 ls = BedrockLandslider(mg,
                        landslides_return_time=tLS,
                        fraction_fines_LS=F_f_LS,
                        phi=phi,
+                       angle_int_frict=angle_int_frict,
                        verbose_landslides=True,
                        landslides_on_boundary_nodes=False,
                        critical_sliding_nodes=None,
                        output_landslide_node_ids=True,
                        )
+
+ctDDD = ConcentrationTrackerDDD(mg,
+                             concentration_initial=C,
+                             concentration_in_bedrock=C_br,
+                             local_production_rate=P,
+                             local_decay_rate=D,
+                             )
 
 ctLS = ConcentrationTrackerBRLS(mg,
                                 ls,
@@ -117,12 +139,11 @@ ctLS = ConcentrationTrackerBRLS(mg,
                                 local_decay_rate=D,
                                 )
 
-
 #%% Create empty arrays to fill during loop
 
 T = np.zeros(ndt)       # Time 
 
-ymax = np.max(mg.at_node["topographic__elevation"][core_ids])+1
+ymax = np.max(mg.at_node["topographic__elevation"][core_ids])+5
 
 # Set colour maps for plotting
 cmap_terrain = mpl.cm.get_cmap("terrain").copy()
@@ -159,8 +180,7 @@ def plot_hill_profile():
     ax2.legend(loc="upper right")
         
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.show()  
-
+    plt.show()
 
 # %% Plot initial hillslope
 
@@ -194,11 +214,25 @@ for i in range(ndt):
     C_old = mg.at_node['sed_property__concentration'][mg.core_nodes].copy()
     
     # Add uplift
-    # mg.at_node['bedrock__elevation'][mg.core_nodes] += uplift_per_step
+    mg.at_node['bedrock__elevation'][mg.core_nodes] += uplift_per_step
+    
+    # Run ExponentialWeatherer
+    ew.calc_soil_prod_rate()
+    soil_prod_per_step = mg.at_node['soil_production__rate'][mg.core_nodes] * dt
+    
+    # Convert bedrock to soil using soil production rate
+    mg.at_node['bedrock__elevation'][mg.core_nodes] -= soil_prod_per_step
+    mg.at_node['soil__depth'][mg.core_nodes] += soil_prod_per_step
     
     # Update topographic elevation to match bedrock and soil depths
     mg.at_node['topographic__elevation'][:] = (mg.at_node["bedrock__elevation"]
                                                + mg.at_node["soil__depth"])
+    
+    # Run DepthDependentDiffuser
+    ddd.run_one_step(dt=dt)
+    
+    # Calculate concentration
+    ctDDD.run_one_step(dt=dt)
     
     # Run DepthDependentDiffuser
     fr.run_one_step()
@@ -208,7 +242,7 @@ for i in range(ndt):
         
     # Calculate concentration
     C_eroded = ctLS.run_one_step(dt=dt)
-    
+        
     plot_hill_profile()
 
     # if i*dt % 10 == 0:

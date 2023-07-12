@@ -31,7 +31,7 @@ ncols = 50
 dx = 10
 dy = dx
 dt = 1
-total_t = 800
+total_t = 200
 U = 0.001
 
 H_init = 0.1
@@ -144,7 +144,7 @@ E_sed = np.zeros([ndt,len(core_ids)])
 E_br = np.zeros([ndt,len(core_ids)])    
 E_total = np.zeros([ndt,len(core_ids)])   
 
-ymax = 1.5
+ymax = 3
 
 # Set colour maps for plotting
 cmap_terrain = mpl.cm.get_cmap("terrain").copy()
@@ -178,6 +178,8 @@ def plot_channel_profile():
     plt.plot(distance,C_soil,color='black',label="Sm Concentration")
     ax2.tick_params(axis='y', labelcolor='black')    
     ax2.legend(loc="upper right")
+    
+    plt.text(-0.1, -0.1, "T = " + str(elapsed_time) + "y", fontsize=15)
         
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.show()  
@@ -209,10 +211,10 @@ for i in range(ndt):
     # Update time counter
     elapsed_time = i*dt
     
-    # Old topo and concentration
-    topo_old = mg.at_node['topographic__elevation'][mg.core_nodes].copy()
-    C_old = mg.at_node['sed_property__concentration'][mg.core_nodes].copy()
-    H_old = mg.at_node['soil__depth'][mg.core_nodes].copy()    
+    # # Old topo and concentration
+    # topo_old = mg.at_node['topographic__elevation'][mg.core_nodes].copy()
+    # C_old = mg.at_node['sed_property__concentration'][mg.core_nodes].copy()
+    # H_old = mg.at_node['soil__depth'][mg.core_nodes].copy()    
 
     # Add uplift
     mg.at_node['bedrock__elevation'][mg.core_nodes] += uplift_per_step
@@ -229,10 +231,12 @@ for i in range(ndt):
     
     ctSP.run_one_step(dt=dt)
     
-    # plot
-    if i*dt % 50 == 0:
+    plot_channel_profile()
+    
+    # # plot
+    # if i*dt % 50 == 0:
         
-        plot_channel_profile()
+    #     plot_channel_profile()
     
     # New topo and concentration
     topo_new = mg.at_node['topographic__elevation'][mg.core_nodes].copy()    

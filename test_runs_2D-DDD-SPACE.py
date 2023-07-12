@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on Wed Jun  7 12:20:00 2023
+Created on Thu Jul  6 16:48:11 2023
 
 @author: LaurentRoberge
 """
@@ -14,9 +14,14 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 from landlab import RasterModelGrid, imshow_grid
-from landlab.components import ExponentialWeatherer, DepthDependentDiffuser
+from landlab.components import (ExponentialWeatherer,
+                                DepthDependentDiffuser,
+                                PriorityFloodFlowRouter,
+                                SpaceLargeScaleEroder
+                                )
 
 from concentration_tracker_DDD import ConcentrationTrackerDDD
+from concentration_tracker_SPACE import ConcentrationTrackerSPACE
 
 # %% Filter warnings
 warnings.filterwarnings('ignore')
@@ -25,32 +30,41 @@ warnings.filterwarnings('ignore')
 
 # Set soil production rate to zero (to avoid C difference between bedrock and soil)
 soil_production_maximum_rate = 0.001
-soil_production_decay_depth = 0.00001
+soil_production_decay_depth = 1
 
-nrows = 3
-ncols = 50
-n_core_nodes = (nrows-2)*(ncols-2)
-hill_bottom_node = ncols
-hill_bottom_link = (ncols*2)-1
-
-dx = 10
+nrows = 30
+ncols = 30
+dx = 50
 dy = dx
-dt = 5
+dt = 1
 
-total_t = 15000
-ndt = int(total_t // dt)
+total_t = 5000
+U = 0.01
 
-C_initial = 0.75
+C_initial = 1
 C_br = 0
-
 P = 0
 D = 0
 
-record_M_total_nodes = np.zeros(ndt)
-record_M_total_links = np.zeros(ndt)
-record_M_out = np.zeros(ndt)
-record_Soil_flux = np.zeros(ndt)
-record_H_total_nodes = np.zeros(ndt)
+H_init = 0.1
+K_sed = 0.01
+K_br = 0.005
+m_sp = 0.5
+n_sp = 1.0
+F_f = 0.0
+phi = 0.0
+H_star = 0.5
+v_s = 1
+
+grid_seed = 11
+
+# Calculated from user inputs
+n_core_nodes = (nrows-2)*(ncols-2)
+total_t = total_t + dt
+ndt = int(total_t // dt)
+uplift_per_step = U * dt
+outlet_node = 0
+node_next_to_outlet = ncols+1
 
 # %% Generate model grid from initial noise
 
@@ -60,17 +74,20 @@ mg.set_status_at_node_on_edges(right=4,
                                top=4,
                                left=4,
                                bottom=4)
-mg.status_at_node[hill_bottom_node] = mg.BC_NODE_IS_FIXED_VALUE
+mg.status_at_node[outlet_node] = mg.BC_NODE_IS_FIXED_VALUE
 
 # Soil depth
 _ = mg.add_zeros('soil__depth', at='node', units= ['m','m'])
-mg.at_node['soil__depth'] += 1.5 # mg.node_x/4 
+mg.at_node['soil__depth'] += 5 #mg.node_x/50 
 #mg.at_node['soil__depth'][ncols + int(3*ncols/4)-1] += 2 
+mg.at_node['soil__depth'][outlet_node] = 0
 
 # Bedrock elevation
 _ = mg.add_zeros('bedrock__elevation', at='node', units= ['m','m'])
-mg.at_node['bedrock__elevation'] += mg.node_x/50
-#mg.at_node['bedrock__elevation'][mg.node_x > dx*ncols/2] += 8
+mg.at_node['bedrock__elevation'] += np.random.rand(mg.number_of_nodes) / 100
+mg.at_node['bedrock__elevation'] += (mg.node_x + mg.node_y)/1000000
+# mg.at_node['bedrock__elevation'][mg.node_x > dx*ncols/2] += 8
+mg.at_node['bedrock__elevation'][outlet_node] = 0
 
 # Topographic elevation
 _ = mg.add_zeros('topographic__elevation', at='node', units= ['m','m'])
@@ -79,13 +96,27 @@ mg.at_node['topographic__elevation'][:] += mg.at_node['soil__depth']
 
 # Magnetic susceptibility concentration field
 C = mg.add_zeros('sed_property__concentration', at='node', units= ['kg/m^3','kg/m^3'])
-mg.at_node['sed_property__concentration'] += 0#C_initial
+mg.at_node['sed_property__concentration'] += 0 #C_initial
 # mg.at_node['sed_property__concentration'][mg.node_x > ncols/2] += C_initial
-mg.at_node['sed_property__concentration'][ncols + int(3*ncols/4)-1] += C_initial
+# mg.at_node['sed_property__concentration'][ncols - int(3*ncols/4)-1] += C_initial
+mg.at_node['sed_property__concentration'][530] += C_initial
+mg.at_node['sed_property__concentration'][320] += C_initial
+mg.at_node['sed_property__concentration'][610] += C_initial
 
-core_ids = np.append(hill_bottom_node, mg.core_nodes)
+core_ids = np.append(outlet_node, mg.core_nodes)
+
+# %% C-F-L Condition (FastScape)
+# Δt <= Cmax * (Δx / (K * (A ** m)))
+
+area = (ncols * dx) * (nrows * dx)
+
+dt_max = 1 * (dx / (max(K_br,K_sed) * (area ** m_sp)))
+if dt > dt_max:
+    raise Exception(str("Timestep length " + str(dt) + " is longer than C-F-L condition allows. Model may be unstable."))
 
 # %% Instantiate model components
+fr = PriorityFloodFlowRouter(mg)
+fr.run_one_step()
 
 ew = ExponentialWeatherer(mg,
                           soil_production_maximum_rate=soil_production_maximum_rate,
@@ -93,12 +124,31 @@ ew = ExponentialWeatherer(mg,
 
 ddd = DepthDependentDiffuser(mg)
 
+sp = SpaceLargeScaleEroder(mg,
+                           K_sed=K_sed,
+                           K_br=K_br,
+                           F_f=F_f,
+                           phi=phi,
+                           H_star=H_star,
+                           m_sp=m_sp,
+                           n_sp=n_sp,
+                           v_s=v_s
+                           )
+
 ctDDD = ConcentrationTrackerDDD(mg,
                              concentration_initial=C,
                              concentration_in_bedrock=C_br,
                              local_production_rate=P,
                              local_decay_rate=D,
                              )
+
+ctSP = ConcentrationTrackerSPACE(mg,
+                                 sp,
+                                 concentration_initial=C_initial,
+                                 concentration_in_bedrock=C_br,
+                                 local_production_rate=P,
+                                 local_decay_rate=D
+                                 )
 
 #%% Create empty arrays to fill during loop
 
@@ -154,11 +204,11 @@ plt.show()
 imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
 plt.show()
 
-plot_hill_profile()
+# plot_hill_profile()
 
 # %% Model Run
 
-plot_hill_profile()
+# plot_hill_profile()
 
 # Set elapsed model time to 0 years
 elapsed_time = 0
@@ -185,6 +235,15 @@ for i in range(ndt):
     mg.at_node['topographic__elevation'][:] = (mg.at_node["bedrock__elevation"]
                                                + mg.at_node["soil__depth"])
     
+    # Run Flow Router
+    fr.run_one_step()
+    
+    # Run SPACE
+    sp.run_one_step(dt=dt)
+    
+    # Calculate concentration
+    ctSP.run_one_step(dt=dt)
+    
     # Run DepthDependentDiffuser
     ddd.run_one_step(dt=dt)
     
@@ -195,52 +254,18 @@ for i in range(ndt):
     
     # plot_hill_profile()
 
-    if i*dt % 200 == 0:
+    if i*dt % 100 == 0:
         
-        plot_hill_profile()
+        # plot_hill_profile()
         
-        # imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink')
-        # plt.show()
-
-    
-    record_M_total_nodes[i] = np.sum(mg.at_node['sed_property__concentration'][mg.core_nodes] * 
-                                mg.at_node['soil__depth'][mg.core_nodes]
-                                )
-    record_M_total_links[i] = np.sum(mg.at_link['QC'])
-    record_M_out[i] = mg.at_link['QC'][hill_bottom_link]
-    record_Soil_flux[i] = mg.at_link['soil__flux'][hill_bottom_link]
-    
-    record_H_total_nodes[i] = np.sum(mg.at_node['soil__depth'][core_ids])
-    #record_M_at_each_node[:,i] = mg.at_node['sed_property__concentration'][core_ids]
-
-# %%
-plt.plot(T,record_M_total_nodes)
-plt.ylabel("Total mass of soil property on grid")
-plt.xlabel("Time (y)")
-plt.show()
-
-plt.plot(T,record_M_total_links)
-plt.ylabel("Total mass of soil property on links")
-plt.xlabel("Time (y)")
-plt.show()
-
-plt.plot(T,record_M_out)
-plt.ylabel("Total mass of soil property exiting bottom link")
-plt.xlabel("Time (y)")
-plt.show()
-
-plt.plot(T,record_Soil_flux)
-plt.ylabel("Soil flux exiting bottom link")
-plt.xlabel("Time (y)")
-plt.show()
-
-plt.plot(T,record_H_total_nodes)
-plt.ylabel("Total depth of soil on grid")
-plt.xlabel("Time (y)")
-plt.show()
-
-mass_conserved_fraction = np.min(record_M_total_nodes)/record_M_total_nodes[0]
-print("Fraction of mass conserved:   " + str(round(mass_conserved_fraction,3)))
+        imshow_grid(mg, "sed_property__concentration", cmap=cmap_Sm, color_for_closed='pink', limits=[0,0.1])
+        plt.show()
+        imshow_grid(mg, "topographic__elevation", cmap=cmap_terrain, color_for_closed='pink')
+        plt.show()
+        imshow_grid(mg, "bedrock__elevation", cmap=cmap_terrain, color_for_closed='pink')
+        plt.show()
+        imshow_grid(mg, "soil__depth", cmap=cmap_soil, color_for_closed='pink')
+        plt.show()
 
 # %% Plot final hillslope
 
@@ -250,4 +275,7 @@ print("Fraction of mass conserved:   " + str(round(mass_conserved_fraction,3)))
 # plt.show()
 # imshow_grid(mg, "soil__depth", cmap=cmap_soil, color_for_closed='pink')
 # plt.show()
+
+
+
 
