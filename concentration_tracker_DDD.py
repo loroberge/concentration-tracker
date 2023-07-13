@@ -26,6 +26,11 @@ class ConcentrationTrackerDDD(Component):
     fluxed in the x and y directions, :math:`C_br` is concentration in parent 
     bedrock, :math:`H_brw` is the height of bedrock weathered into soil, 
     :math:`P` is the local production rate, :math:`D` is the local decay rate.
+    
+    NOTE: This component requires a soil flux field calculated by a hillslope
+    diffusion component and must be run after every diffusion step. Currently,
+    this component can only couple with the DepthDependentDiffuser or the
+    DepthDependentTaylorDiffuser (without the dynamic timestep option).
 
     Examples
     --------
@@ -53,8 +58,10 @@ class ConcentrationTrackerDDD(Component):
     >>> ct.run_one_step(1.)
     >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
     ...             np.array([4.11701964, 8.01583689, 11.00247875]))
+    True
     >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
     ...             np.array([0., 0.24839685, 1.]))
+    True
    
     Now, a 2-D pyramid-shaped hillslope.
 
@@ -78,10 +85,12 @@ class ConcentrationTrackerDDD(Component):
     ...             np.array([6.        ,  7.13533528,  6.        ,
     ...                       7.13533528,  8.27067057,  7.13533528,
     ...                       6.        ,  7.13533528,  6.         ]))
+    True
     >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
     ...             np.array([0.        ,  0.38079708,  0.        ,
     ...                       0.38079708,  1.        ,  0.38079708,
     ...                       0.        ,  0.38079708,  0.         ]))
+    True
     
     And running one more step.
     
@@ -91,12 +100,14 @@ class ConcentrationTrackerDDD(Component):
     ...             np.array([5.52060315,  6.62473963,  5.52060315,
     ...                       6.62473963,  8.00144598,  6.62473963,
     ...                       5.52060315,  6.62473963,  5.52060315 ]))
+    True
     >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
     ...             np.array([0.09648071,  0.44750673,  0.09648071,
     ...                       0.44750673,  1.        ,  0.44750673,
     ...                       0.09648071,  0.44750673,  0.09648071 ]))
+    True
 
-▒
+
     References
     ----------
     **Required Software Citation(s) Specific to this Component**
@@ -245,9 +256,6 @@ class ConcentrationTrackerDDD(Component):
             self._grid.at_node["sed_property__decay_rate"] += self.D
         self.D = self._grid.at_node["sed_property__decay_rate"]
 
-        # return_array_at_node()
-        # return_array_at_link()
-        
         # Sediment property concentration field (at links, to calculate dQCdx)
         self._C_links = np.zeros(self._grid.number_of_links)
         
