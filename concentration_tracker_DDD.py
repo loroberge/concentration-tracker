@@ -106,7 +106,42 @@ class ConcentrationTrackerDDD(Component):
     ...                       0.44750673,  1.        ,  0.44750673,
     ...                       0.09648071,  0.44750673,  0.09648071 ]))
     True
-
+    
+    Finally, the same 2D hillslope now using the DepthDependentTaylorDiffuser.
+    Note that the timestep must be smaller than 1 to maintain stability in the 
+    diffusion calculation. Typically, one could use the dynamic timestepping
+    option. However, here it will provide incorrect soil flux values to the 
+    ConcentrationTrackerForDiffusion, which cannot do sub-timestep calculations.
+    Use the if_unstable="warn" flag when instantiating the Taylor diffuser and
+    pick a timestep that is stable.
+    
+    >>> from landlab.components import DepthDependentTaylorDiffuser
+    >>> mg = RasterModelGrid((5, 5),xy_spacing=2.)
+    >>> c = mg.add_zeros('sed_property__concentration', at='node')
+    >>> h = mg.add_zeros("soil__depth", at="node")
+    >>> z_br = mg.add_zeros("bedrock__elevation", at="node")
+    >>> z = mg.add_zeros("topographic__elevation", at="node")
+    >>> _ = mg.add_zeros('soil_production__rate', at='node')
+    >>> c[12] += 1
+    >>> h += 2
+    >>> z_br += 8
+    >>> z_br -= abs(4 - mg.node_x)
+    >>> z_br -= abs(4 - mg.node_y)
+    >>> z += z_br + h
+    >>> ddtd = DepthDependentTaylorDiffuser(mg, if_unstable="warn")
+    >>> ct = ConcentrationTrackerForDiffusion(mg)
+    >>> ddtd.run_one_step(0.4)
+    >>> ct.run_one_step(0.4)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([6.        ,  7.30826823,  6.        ,
+    ...                       7.30826823,  8.61653645,  7.30826823,
+    ...                       6.        ,  7.30826823,  6.         ]))
+    True
+    >>> np.allclose(mg.at_node["sed_property__concentration"][mg.core_nodes],
+    ...             np.array([0.        ,  0.26436925,  0.        ,
+    ...                       0.26436925,  1.        ,  0.26436925,
+    ...                       0.        ,  0.26436925,  0.         ]))
+    True
 
     References
     ----------
