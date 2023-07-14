@@ -13,25 +13,111 @@ from landlab.utils.return_array import return_array_at_node
 
 class ConcentrationTrackerSPACE(Component):
 
-    """This component tracks the concentration ...........
+    """This component tracks the concentration of any user-defined property of
+    sediment using a mass balance approach in which the concentration :math:`C`
+    is calculated as:
+
+    .. math::
+        
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~UPDATE BELOW~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        ∂CH/∂t = [-(∂q_x C_x)/∂x - (∂q_y C_y)/∂y] + C_br*H_brw + PH + DH
+        
+    where :math:`H` is sediment depth, :math:`q_x` and :math:`q_y` are sediment
+    fluxed in the x and y directions, :math:`C_br` is concentration in parent 
+    bedrock, :math:`H_brw` is the height of bedrock weathered into soil, 
+    :math:`P` is the local production rate, :math:`D` is the local decay rate.
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~UPDATE ABOVE~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    
+    NOTE: This component requires the sediment__influx and sediment__outflux 
+    fields calculated by either the Space or SpaceLargeScaleEroder component.
+    This component must be run after every Space or SpaceLargeScaleEroder step
+    and before any other flux component. For hillslope sediment tracking see 
+    ConcentrationTrackerForDiffusion.
 
     Examples
     --------
+    A 1-D stream channel:
+        
     >>> import numpy as np
     >>> from landlab import RasterModelGrid
-    >>> from landlab.components import ExponentialWeatherer
-    >>> from landlab.components import DepthDependentDiffuser
-    >>> from landlab.components import ConcentrationTracker
+    >>> from landlab.components import SpaceLargeScaleEroder
+    >>> from landlab.components import ConcentrationTrackerForSpace
     >>> ... SIMPLE 1-D EXAMPLE
-    
-    Now for a 1-D stream channel:
-
-    >>> ... EXAMPLE  
     
     Now, a 2-D landscape with stream channels.
 
     >>> ... EXAMPLE  
+    
+    
+    
+    >>> mg = RasterModelGrid((3, 6))
+    >>> mg.set_status_at_node_on_edges(right=4, top=4, left=4, bottom=4)
+    >>> mg.status_at_node[5] = mg.BC_NODE_IS_FIXED_VALUE
+    >>> c = mg.add_zeros('sediment_property__concentration', at='node')
+    >>> h = mg.add_zeros("soil__depth", at="node")
+    >>> z_br = mg.add_zeros("bedrock__elevation", at="node")
+    >>> z = mg.add_zeros("topographic__elevation", at="node")
+    >>> c[9] += 1
+    >>> h += 1
+    >>> z_br += mg.node_x
+    >>> z += z_br + h
+    >>> sp = SpaceLargeScaleEroder(mg)
+    >>> ct = ConcentrationTrackerForSpace(mg)
+    >>> sp.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([4.11701964, 8.01583689, 11.00247875]))
+    True
+    >>> np.allclose(mg.at_node["sediment_property__concentration"][mg.core_nodes],
+    ...             np.array([0., 0.24839685, 1.]))
+    True
+   
+    Now, a 2-D landscape with stream channels.
 
+    >>> mg = RasterModelGrid((7, 7),xy_spacing=2.)
+    >>> c = mg.add_zeros('sediment_property__concentration', at='node')
+    >>> h = mg.add_zeros("soil__depth", at="node")
+    >>> z_br = mg.add_zeros("bedrock__elevation", at="node")
+    >>> z = mg.add_zeros("topographic__elevation", at="node")
+    >>> c[12] += 1
+    >>> h += 1
+    >>> z_br += 2
+    >>> z += z_br + h
+    >>> sp = SpaceLargeScaleEroder(mg)
+    >>> ct = ConcentrationTrackerForDiffusion(mg)
+    >>> sp.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([6.        ,  7.13533528,  6.        ,
+    ...                       7.13533528,  8.27067057,  7.13533528,
+    ...                       6.        ,  7.13533528,  6.         ]))
+    True
+    >>> np.allclose(mg.at_node["sediment_property__concentration"][mg.core_nodes],
+    ...             np.array([0.        ,  0.38079708,  0.        ,
+    ...                       0.38079708,  1.        ,  0.38079708,
+    ...                       0.        ,  0.38079708,  0.         ]))
+    True
+    
+    And running one more step.
+    
+    >>> ddd.run_one_step(1.)
+    >>> ct.run_one_step(1.)
+    >>> np.allclose(mg.at_node["topographic__elevation"][mg.core_nodes],
+    ...             np.array([5.52060315,  6.62473963,  5.52060315,
+    ...                       6.62473963,  8.00144598,  6.62473963,
+    ...                       5.52060315,  6.62473963,  5.52060315 ]))
+    True
+    >>> np.allclose(mg.at_node["sediment_property__concentration"][mg.core_nodes],
+    ...             np.array([0.09648071,  0.44750673,  0.09648071,
+    ...                       0.44750673,  1.        ,  0.44750673,
+    ...                       0.09648071,  0.44750673,  0.09648071 ]))
+    True
+    
+    
     References
     ----------
     **Required Software Citation(s) Specific to this Component**
@@ -81,11 +167,11 @@ class ConcentrationTrackerSPACE(Component):
             "mapping": "node",
             "doc": "Land surface topographic elevation",
         },
-        "sed_property__concentration": {
+        "sediment_property__concentration": {
             "dtype": float,
             "intent": "out",
             "optional": False,
-            "units": "kg/m^3",
+            "units": "-/m^3",
             "mapping": "node",
             "doc": "Mass concentration of property per unit volume of sediment",
         },
@@ -93,23 +179,23 @@ class ConcentrationTrackerSPACE(Component):
             "dtype": float,
             "intent": "out",
             "optional": False,
-            "units": "kg/m^3",
+            "units": "-/m^3",
             "mapping": "node",
             "doc": "Mass concentration of property per unit volume of bedrock",
         },
-        "sed_property__production_rate": {
+        "sediment_property_production__rate": {
             "dtype": float,
             "intent": "out",
             "optional": False,
-            "units": "kg/m^3/yr",
+            "units": "-/m^3/yr",
             "mapping": "node",
             "doc": "Production rate of property per unit volume of sediment per time",
         },
-        "sed_property__decay_rate": {
+        "sediment_property_decay__rate": {
             "dtype": float,
             "intent": "out",
             "optional": False,
-            "units": "kg/m^3/yr",
+            "units": "-/m^3/yr",
             "mapping": "node",
             "doc": "Decay rate of property per unit volume of sediment per time",
         },
@@ -129,13 +215,13 @@ class ConcentrationTrackerSPACE(Component):
         grid: ModelGrid
             Landlab ModelGrid object
         concentration_initial: positive float, array, or field name (optional)
-            Initial concentration in soil/sediment, kg/m^3
+            Initial concentration in soil/sediment, -/m^3
         concentration_in_bedrock: positive float, array, or field name (optional)
-            Concentration in bedrock, kg/m^3
+            Concentration in bedrock, -/m^3
         local_production_rate: float, array, or field name (optional)
-            Rate of local production, kg/m^3/yr
+            Rate of local production, -/m^3/yr
         local_decay_rate: float, array, or field name (optional)
-            Rate of local decay, kg/m^3/yr
+            Rate of local decay, -/m^3/yr
         """
         
         super().__init__(grid)
@@ -165,21 +251,21 @@ class ConcentrationTrackerSPACE(Component):
         self.initialize_output_fields()
         
         # Define concentration field (if all zeros, then add C_init)
-        if not self._grid.at_node["sed_property__concentration"].any():
-            self._grid.at_node["sed_property__concentration"] += self.C_init
-        self._concentration = self._grid.at_node["sed_property__concentration"]
+        if not self._grid.at_node["sediment_property__concentration"].any():
+            self._grid.at_node["sediment_property__concentration"] += self.C_init
+        self._concentration = self._grid.at_node["sediment_property__concentration"]
 
         if not self._grid.at_node["bedrock_property__concentration"].any():
             self._grid.at_node["bedrock_property__concentration"] += self.C_br
         self.C_br = self._grid.at_node["bedrock_property__concentration"]
         
-        if not self._grid.at_node["sed_property__production_rate"].any():
-            self._grid.at_node["sed_property__production_rate"] += self.P
-        self.P = self._grid.at_node["sed_property__production_rate"]
+        if not self._grid.at_node["sediment_property_production__rate"].any():
+            self._grid.at_node["sediment_property_production__rate"] += self.P
+        self.P = self._grid.at_node["sediment_property_production__rate"]
         
-        if not self._grid.at_node["sed_property__decay_rate"].any():
-            self._grid.at_node["sed_property__decay_rate"] += self.D
-        self.D = self._grid.at_node["sed_property__decay_rate"]
+        if not self._grid.at_node["sediment_property_decay__rate"].any():
+            self._grid.at_node["sediment_property_decay__rate"] += self.D
+        self.D = self._grid.at_node["sediment_property_decay__rate"]
         
         # Check that concentration values are within physical limits
         if isinstance(concentration_initial, np.ndarray):

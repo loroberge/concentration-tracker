@@ -8,15 +8,13 @@ Created on Wed Jul 12 12:25:27 2023
 import pytest
 import numpy as np
 from landlab import FieldError, RasterModelGrid
-from landlab.components import DepthDependentDiffuser
-#from landlab.components import ConcentrationTrackerForDiffusion
-from concentration_tracker_DDD import ConcentrationTrackerDDD as ConcentrationTrackerForDiffusion
+from landlab.components import ConcentrationTrackerForSpace
 
-
+# %% Test input field errors
 
 def test_input_soil_flux_from_diffuser():
     """
-    ConcentrationTrackerForDiffusion should throw an error when output fields
+    ConcentrationTrackerForSpace should throw an error when output fields
     from a diffusion component do not exist (soil__flux)
     """
     # Make a raster model grid 
@@ -27,12 +25,12 @@ def test_input_soil_flux_from_diffuser():
 
     # Instantiate the component
     with pytest.raises(FieldError):
-        _ = ConcentrationTrackerForDiffusion(mg)
+        _ = ConcentrationTrackerForSpace(mg)
 
 
 def test_input_fields_soil():
     """
-    ConcentrationTrackerForDiffusion should throw an error when input fields 
+    ConcentrationTrackerForSpace should throw an error when input fields 
     are not provided (soil__depth, soil_production__rate, topographic__elevation)
     """
     mg = RasterModelGrid((3, 3))
@@ -45,16 +43,18 @@ def test_input_fields_soil():
     # Instantiate the component
     for field in fields_to_add:
         with pytest.raises(FieldError):
-            _ = ConcentrationTrackerForDiffusion(mg)
+            _ = ConcentrationTrackerForSpace(mg)
         _ = mg.add_zeros(field, at="node")
 
 
+# %% Test field instantiation
+
 def test_field_instantiation():
     """
-    ConcentrationTrackerForDiffusion should instantiate the following fields
-    when they do not already exist ('sed_property_mass__flux', 
-    'bedrock_property__concentration', 'sed_property__concentration',
-    'sed_property__decay_rate', 'sed_property__production_rate')
+    ConcentrationTrackerForSpace should instantiate the following fields
+    when they do not already exist ('sediment_property__mass_flux', 
+    'bedrock_property__concentration', 'sediment_property__concentration',
+    'sediment_property_decay__rate', 'sediment_property_production__rate')
     """
     mg = RasterModelGrid((3, 3))
     _ = mg.add_zeros('soil__flux', at='link')
@@ -62,18 +62,20 @@ def test_field_instantiation():
     _ = mg.add_zeros('soil_production__rate', at='node')
     _ = mg.add_zeros("topographic__elevation", at="node")
 
-    _ = ConcentrationTrackerForDiffusion(mg)
+    _ = ConcentrationTrackerForSpace(mg)
     
     node_fields = ['bedrock_property__concentration',
-                   'sed_property__concentration',
-                   'sed_property__decay_rate',
-                   'sed_property__production_rate'
+                   'sediment_property__concentration',
+                   'sediment_property_decay__rate',
+                   'sediment_property_production__rate'
                    ]
     
-    assert "sed_property_mass__flux" in mg.at_link
+    assert "sediment_property__mass_flux" in mg.at_link
     for node_field in node_fields:
         assert node_field in mg.at_node
         
+        
+#%% Test different user input options
 
 # Test that default input produces correct fields with no pre-existing fields
 def test_fields_for_default_input():
@@ -83,13 +85,13 @@ def test_fields_for_default_input():
     _ = mg.add_zeros("topographic__elevation", at="node")
     _ = mg.add_zeros('soil_production__rate', at='node')
     
-    _ = ConcentrationTrackerForDiffusion(mg)
+    _ = ConcentrationTrackerForSpace(mg)
     
-    link_field = mg.at_link["sed_property_mass__flux"]
-    node_fields = [mg.at_node["sed_property__concentration"],
+    link_field = mg.at_link["sediment_property__mass_flux"]
+    node_fields = [mg.at_node["sediment_property__concentration"],
                    mg.at_node["bedrock_property__concentration"],
-                   mg.at_node["sed_property__production_rate"],
-                   mg.at_node["sed_property__decay_rate"]
+                   mg.at_node["sediment_property_production__rate"],
+                   mg.at_node["sediment_property_decay__rate"]
                    ]
     
     link_check = np.array([0.,  0.,
@@ -116,19 +118,19 @@ def test_fields_for_default_input_with_preexisting_fields():
     _ = mg.add_zeros("topographic__elevation", at="node")
     _ = mg.add_zeros('soil_production__rate', at='node')
     
-    _ = mg.add_ones('sed_property_mass__flux', at='link')
-    _ = mg.add_ones('sed_property__concentration', at='node')
+    _ = mg.add_ones('sediment_property__mass_flux', at='link')
+    _ = mg.add_ones('sediment_property__concentration', at='node')
     _ = mg.add_ones('bedrock_property__concentration', at='node')
-    _ = mg.add_ones('sed_property__production_rate', at='node')
-    _ = mg.add_ones('sed_property__decay_rate', at='node')
+    _ = mg.add_ones('sediment_property_production__rate', at='node')
+    _ = mg.add_ones('sediment_property_decay__rate', at='node')
     
-    _ = ConcentrationTrackerForDiffusion(mg)
+    _ = ConcentrationTrackerForSpace(mg)
     
-    link_field = mg.at_link["sed_property_mass__flux"]
-    node_fields = [mg.at_node["sed_property__concentration"],
+    link_field = mg.at_link["sediment_property__mass_flux"]
+    node_fields = [mg.at_node["sediment_property__concentration"],
                    mg.at_node["bedrock_property__concentration"],
-                   mg.at_node["sed_property__production_rate"],
-                   mg.at_node["sed_property__decay_rate"]
+                   mg.at_node["sediment_property_production__rate"],
+                   mg.at_node["sediment_property_decay__rate"]
                    ]
     
     link_check = np.array([1.,  1.,
@@ -155,17 +157,17 @@ def test_fields_for_user_value_input():
     _ = mg.add_zeros("topographic__elevation", at="node")
     _ = mg.add_zeros('soil_production__rate', at='node')
         
-    _ = ConcentrationTrackerForDiffusion(mg,    
+    _ = ConcentrationTrackerForSpace(mg,    
                                          concentration_initial=1,
                                          concentration_in_bedrock=1,
                                          local_production_rate=1,
                                          local_decay_rate=1,)
     
-    link_field = mg.at_link["sed_property_mass__flux"]
-    node_fields = [mg.at_node["sed_property__concentration"],
+    link_field = mg.at_link["sediment_property__mass_flux"]
+    node_fields = [mg.at_node["sediment_property__concentration"],
                    mg.at_node["bedrock_property__concentration"],
-                   mg.at_node["sed_property__production_rate"],
-                   mg.at_node["sed_property__decay_rate"]
+                   mg.at_node["sediment_property_production__rate"],
+                   mg.at_node["sediment_property_decay__rate"]
                    ]
     
     link_check = np.array([0.,  0.,
@@ -197,17 +199,17 @@ def test_fields_for_user_array_input():
     p = np.array([1.,  1.,  1.,  1.,  1.,  1., 1.,  1.,  1.])
     d = np.array([1.,  1.,  1.,  1.,  1.,  1., 1.,  1.,  1.])
     
-    _ = ConcentrationTrackerForDiffusion(mg,    
+    _ = ConcentrationTrackerForSpace(mg,    
                                          concentration_initial=c_sed,
                                          concentration_in_bedrock=c_br,
                                          local_production_rate=p,
                                          local_decay_rate=d,)
     
-    link_field = mg.at_link["sed_property_mass__flux"]
-    node_fields = [mg.at_node["sed_property__concentration"],
+    link_field = mg.at_link["sediment_property__mass_flux"]
+    node_fields = [mg.at_node["sediment_property__concentration"],
                    mg.at_node["bedrock_property__concentration"],
-                   mg.at_node["sed_property__production_rate"],
-                   mg.at_node["sed_property__decay_rate"]
+                   mg.at_node["sediment_property_production__rate"],
+                   mg.at_node["sediment_property_decay__rate"]
                    ]
     
     link_check = np.array([0.,  0.,
@@ -234,22 +236,22 @@ def test_fields_for_user_field_input():
     _ = mg.add_zeros("topographic__elevation", at="node")
     _ = mg.add_zeros('soil_production__rate', at='node')
     
-    c_sed = mg.add_ones('sed_property__concentration', at='node')
+    c_sed = mg.add_ones('sediment_property__concentration', at='node')
     c_br = mg.add_ones('bedrock_property__concentration', at='node')
-    p = mg.add_ones('sed_property__production_rate', at='node')
-    d = mg.add_ones('sed_property__decay_rate', at='node')
+    p = mg.add_ones('sediment_property_production__rate', at='node')
+    d = mg.add_ones('sediment_property_decay__rate', at='node')
     
-    _ = ConcentrationTrackerForDiffusion(mg,    
+    _ = ConcentrationTrackerForSpace(mg,    
                                          concentration_initial=c_sed,
                                          concentration_in_bedrock=c_br,
                                          local_production_rate=p,
                                          local_decay_rate=d,)
     
-    link_field = mg.at_link["sed_property_mass__flux"]
-    node_fields = [mg.at_node["sed_property__concentration"],
+    link_field = mg.at_link["sediment_property__mass_flux"]
+    node_fields = [mg.at_node["sediment_property__concentration"],
                    mg.at_node["bedrock_property__concentration"],
-                   mg.at_node["sed_property__production_rate"],
-                   mg.at_node["sed_property__decay_rate"]
+                   mg.at_node["sediment_property_production__rate"],
+                   mg.at_node["sediment_property_decay__rate"]
                    ]
     
     link_check = np.array([0.,  0.,
@@ -271,7 +273,7 @@ def test_fields_for_user_field_input():
 # Test that physically impossible inputs raise correct errors
 def test_properties_concentrations():
     """
-    ConcentrationTrackerForDiffusion should throw an error when input 
+    ConcentrationTrackerForSpace should throw an error when input 
     concentration values are negative.
     """
     mg = RasterModelGrid((3, 3))
@@ -282,12 +284,12 @@ def test_properties_concentrations():
 
     # Instantiate the component
     with pytest.raises(ValueError):
-        _ = ConcentrationTrackerForDiffusion(mg, concentration_initial=-1)
+        _ = ConcentrationTrackerForSpace(mg, concentration_initial=-1)
     # Instantiate the component
     with pytest.raises(ValueError):
-        _ = ConcentrationTrackerForDiffusion(mg, concentration_in_bedrock=-1)
+        _ = ConcentrationTrackerForSpace(mg, concentration_in_bedrock=-1)
 
-
+# %% Test against analytical solutions
 # PLACEHOLDER: Test results against 1-D analytical solution (for DepthDependentDiffuser)
 # (I think this is covered by the docstring tests, so I haven't added it here)
 
